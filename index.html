@@ -176,7 +176,8 @@ function calcAccount(acc,prices){
   var first=sorted[0]?sorted[0].date:null;
   var months=first?monthsBetween(first):0;
   var days=first?daysBetween(first):1;
-  var cagr=(first&&contributed>0&&totalAsset>0)?Math.pow(totalAsset/contributed,365/days)-1:0;
+  var cagr=(first&&contributed>0&&totalAsset>0&&days>=30)?xirr(sorted,totalAsset):
+    (first&&contributed>0&&totalAsset>0?totalRet:0);
   return {rows:rows,stockValue:stockValue,stockCost:stockCost,totalAsset:totalAsset,
     contributed:contributed,pnl:pnl,totalRet:totalRet,months:months,cagr:cagr,first:first,sorted:sorted};
 }
@@ -191,6 +192,32 @@ function calcRebalance(acc,prices,stat,addMoney){
     return {h:h,price:price,targetAmt:targetAmt,targetQty:targetQty,adjQty:adjQty,tradeAmt:adjQty*price};});
   var invested=rows.reduce(function(s,r){return s+r.targetQty*r.price;},0);
   return {base:base,wsum:wsum,rows:rows,invested:invested,leftover:base-invested};
+}
+
+/* ===================== 연환산 수익률: XIRR (내부수익률) ===================== */
+/* 각 납입 시점을 반영한 정확한 연 환산 수익률.
+   납입금=음(-)의 현금유출, 현재 평가자산=양(+)의 유입으로 보고
+   순현재가치(NPV)=0 이 되는 연이율 r 을 이분법으로 구한다. */
+function xirr(conts,totalAsset){
+  if(!conts.length||totalAsset<=0)return 0;
+  var d0=new Date(conts[0].date).getTime();
+  var flows=[];
+  for(var i=0;i<conts.length;i++){
+    flows.push([(new Date(conts[i].date).getTime()-d0)/86400000,-conts[i].amount]);
+  }
+  flows.push([(Date.now()-d0)/86400000,totalAsset]);
+  function npv(r){
+    var s=0;
+    for(var j=0;j<flows.length;j++)s+=flows[j][1]/Math.pow(1+r,flows[j][0]/365);
+    return s;
+  }
+  var lo=-0.9999,hi=20;
+  if(npv(lo)<=0||npv(hi)>=0)return 0;
+  for(var k=0;k<200;k++){
+    var mid=(lo+hi)/2;
+    if(npv(mid)>0)lo=mid;else hi=mid;
+  }
+  return (lo+hi)/2;
 }
 
 /* ===================== 납입내역 월 단위 통합 ===================== */
