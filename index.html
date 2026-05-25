@@ -104,6 +104,14 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 .foot{display:flex;gap:8px;flex-wrap:wrap;margin-top:30px;padding-top:18px;border-top:1px solid var(--line);}
 .divider{height:34px;width:1px;background:var(--line);}
 .empty{text-align:center;color:var(--txt2);padding:64px 20px;font-size:14px;line-height:1.9;}
+.ycard{margin-top:12px;}
+.yhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;padding-bottom:9px;border-bottom:1px solid var(--line);}
+.yname{font-size:16px;font-weight:800;letter-spacing:-.01em;}
+.ytotal{font-size:14px;color:var(--mint);font-weight:600;}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px 16px;}
+.mrow{display:flex;align-items:center;gap:8px;}
+.mlabel{font-size:12px;color:var(--txt3);width:30px;flex-shrink:0;text-align:right;font-weight:600;}
+.minput{flex:1;text-align:right;min-width:0;}
 </style>
 </head>
 <body>
@@ -181,6 +189,24 @@ function calcRebalance(acc,prices,stat,addMoney){
     return {h:h,price:price,targetAmt:targetAmt,targetQty:targetQty,adjQty:adjQty,tradeAmt:adjQty*price};});
   var invested=rows.reduce(function(s,r){return s+r.targetQty*r.price;},0);
   return {base:base,wsum:wsum,rows:rows,invested:invested,leftover:base-invested};
+}
+
+/* ===================== 납입내역 월 단위 통합 ===================== */
+function consolidate(st){
+  st.accounts.forEach(function(a){
+    var map={};
+    (a.contributions||[]).forEach(function(c){
+      if(!c||!c.date)return;
+      var k=String(c.date).slice(0,7);
+      if(!map[k])map[k]={id:uid(),date:c.date,amount:0};
+      map[k].amount+=(c.amount||0);
+      if(c.date<map[k].date)map[k].date=c.date;
+    });
+    a.contributions=Object.keys(map).map(function(k){return map[k];})
+      .filter(function(c){return c.amount>0;})
+      .sort(function(x,y){return x.date<y.date?-1:1;});
+  });
+  return st;
 }
 
 /* ===================== 차트 (SVG) ===================== */
@@ -401,39 +427,50 @@ function softRebal(acc){
 }
 
 /* ---- 납입 내역 탭 ---- */
+function contribMetricsHTML(stat){
+  var w=stat.sorted.filter(function(c){return c.amount>0;});
+  var total=stat.contributed;
+  return metricHTML("총 납입금","₩"+won(total))
+    +metricHTML("납입 개월수",w.length+"개월")
+    +metricHTML("월 평균 납입","₩"+won(w.length?total/w.length:0))
+    +metricHTML("첫 납입",w[0]?w[0].date.slice(0,7):"—");
+}
 function viewContrib(acc){
   var stat=calcAccount(acc,state.prices);
-  var sorted=stat.sorted;
-  var total=stat.contributed;
-  var run=0,chart=sorted.map(function(c){run+=c.amount;return {label:c.date.slice(2),value:run};});
-  var rows="";
-  sorted.slice().reverse().forEach(function(c){
-    rows+='<tr><td class="num" style="text-align:left;color:'+C.txt2+'">'+esc(c.date)+'</td>'
-      +'<td style="text-align:left;color:'+C.txt2+'">'+esc(c.memo||"—")+'</td>'
-      +'<td class="num">'+won(c.amount)+'</td>'
-      +'<td><button class="x" data-act="del-c" data-id="'+c.id+'">✕</button></td></tr>';});
-  if(!rows)rows='<tr><td colspan="4" style="color:'+C.txt3+';padding:20px">납입 내역이 없습니다.</td></tr>';
-  return '<div class="fade">'
-    +bar("납입 내역")
-    +'<div class="metrics">'
-    +metricHTML("총 납입금","₩"+won(total))
-    +metricHTML("납입 횟수",sorted.length+"회")
-    +metricHTML("평균 납입액","₩"+won(sorted.length?total/sorted.length:0))
-    +metricHTML("첫 납입일",sorted[0]?sorted[0].date:"—")
-    +'</div>'
-    +'<div class="card"><div class="lbl">누적 납입금</div>'+areaSVG(chart)+'</div>'
-    +bar("납입 추가")
-    +'<div class="card" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">'
-    +'<div><div class="lbl">날짜</div><input class="input t" type="date" id="c_date" value="'+todayStr()+'" style="width:150px"></div>'
-    +'<div><div class="lbl">내용</div><input class="input t" id="c_memo" placeholder="예: 정기 납입" style="width:150px"></div>'
-    +'<div><div class="lbl">납입액</div><input class="input" id="c_amount" inputmode="decimal" placeholder="0" style="width:130px;text-align:right"></div>'
-    +'<button class="btn" data-act="add-c" style="margin-left:auto">+ 추가</button></div>'
-    +'<div class="tablewrap" style="margin-top:14px"><table><thead><tr>'
-    +'<th style="text-align:left">날짜</th><th style="text-align:left">내용</th><th>납입액</th><th></th>'
-    +'</tr></thead><tbody>'+rows
-    +'<tr class="total"><td class="lbl" style="text-align:left">계</td><td></td>'
-    +'<td class="num">'+won(total)+'</td><td></td></tr>'
-    +'</tbody></table></div></div>';
+  var ymMap={};
+  stat.sorted.forEach(function(c){var k=c.date.slice(0,7);ymMap[k]=(ymMap[k]||0)+c.amount;});
+  var w=stat.sorted.filter(function(c){return c.amount>0;});
+  var nowY=new Date().getFullYear();
+  var minY=w.length?parseInt(w[0].date.slice(0,4),10):nowY;
+  var maxY=Math.max(nowY,w.length?parseInt(w[w.length-1].date.slice(0,4),10):nowY);
+  var html='<div class="fade">'+bar("납입 내역")
+    +'<div class="metrics" id="m_contrib">'+contribMetricsHTML(stat)+'</div>';
+  for(var y=maxY;y>=minY;y--){
+    var yTotal=0,months="";
+    for(var m=1;m<=12;m++){
+      var ym=y+"-"+(m<10?"0"+m:m),amt=ymMap[ym]||0;yTotal+=amt;
+      months+='<div class="mrow"><span class="mlabel">'+m+'월</span>'
+        +'<input class="input minput" data-edit="contrib" data-ym="'+ym+'" inputmode="decimal" value="'
+        +(amt?won(amt):"")+'" placeholder="0"></div>';
+    }
+    html+='<div class="card ycard"><div class="yhead">'
+      +'<span class="yname">'+y+'년</span>'
+      +'<span class="ytotal mono" id="yt_'+y+'">₩'+won(yTotal)+'</span></div>'
+      +'<div class="mgrid">'+months+'</div></div>';
+  }
+  return html+'</div>';
+}
+function softContrib(acc){
+  var stat=calcAccount(acc,state.prices);
+  if(el("m_contrib"))el("m_contrib").innerHTML=contribMetricsHTML(stat);
+  var ymMap={};
+  stat.sorted.forEach(function(c){var k=c.date.slice(0,7);ymMap[k]=(ymMap[k]||0)+c.amount;});
+  var nodes=document.querySelectorAll('[id^="yt_"]');
+  for(var i=0;i<nodes.length;i++){
+    var y=nodes[i].id.slice(3),t=0;
+    for(var m=1;m<=12;m++){var ym=y+"-"+(m<10?"0"+m:m);t+=ymMap[ym]||0;}
+    nodes[i].textContent="₩"+won(t);
+  }
 }
 
 /* ---- 공통 푸터 ---- */
@@ -517,12 +554,6 @@ el("app").addEventListener("click",function(e){
   else if(act==="equalize"){var n=acc.holdings.length||1;var w=Math.round(1000/n)/10;
     patch(function(){acc.holdings.forEach(function(h){h.weight=w;});});render();}
   else if(act==="apply-rebal"){applyRebalance(acc);}
-  else if(act==="add-c"){
-    var d=el("c_date").value,m=el("c_memo").value,am=num(el("c_amount").value);
-    if(!d||!am){alert("날짜와 금액을 입력하세요.");return;}
-    patch(function(){acc.contributions.push({id:uid(),date:d,memo:m,amount:am});});render();}
-  else if(act==="del-c"){var cid=t.getAttribute("data-id");
-    patch(function(){acc.contributions=acc.contributions.filter(function(c){return c.id!==cid;});});render();}
   else if(act==="add-acc"){
     var name=prompt("새 계좌 이름","새 계좌");if(!name)return;
     var na={id:uid(),name:name,cash:0,holdings:[],contributions:[]};
@@ -559,6 +590,13 @@ el("app").addEventListener("input",function(e){
   if(f==="price"){
     var code=t.getAttribute("data-code");
     if(code){state.prices[code]=num(t.value);save();softRefresh();}return;}
+  if(f==="contrib"&&acc){
+    var ym=t.getAttribute("data-ym"),cv=num(t.value),ent=null;
+    for(var ci=0;ci<acc.contributions.length;ci++){
+      if(acc.contributions[ci].date.slice(0,7)===ym){ent=acc.contributions[ci];break;}}
+    if(ent)ent.amount=cv;
+    else if(cv>0)acc.contributions.push({id:uid(),date:ym+"-01",amount:cv});
+    save();softContrib(acc);return;}
   if(!acc)return;
   var id=t.getAttribute("data-id");
   var h=acc.holdings.filter(function(x){return x.id===id;})[0];
@@ -580,7 +618,7 @@ el("importer").addEventListener("change",function(e){
     try{
       var data=JSON.parse(rd.result);
       if(!data.accounts||!data.prices)throw 0;
-      state=data;save();ui.accId=null;ui.tab="port";render();
+      state=consolidate(data);save();ui.accId=null;ui.tab="port";render();
       alert("백업을 불러왔습니다.");
     }catch(err){alert("올바른 백업 파일이 아닙니다.");}
     el("importer").value="";
@@ -589,7 +627,7 @@ el("importer").addEventListener("change",function(e){
 });
 
 /* ===================== 시작 ===================== */
-state=load()||seed();
+state=consolidate(load()||seed());
 render();
 
 /* PWA: 서비스워커 등록 */
