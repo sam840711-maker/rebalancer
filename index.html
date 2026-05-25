@@ -118,6 +118,104 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 .mrow{display:flex;align-items:center;gap:8px;}
 .mlabel{font-size:12px;color:var(--txt3);width:30px;flex-shrink:0;text-align:right;font-weight:600;}
 .minput{flex:1;text-align:right;min-width:0;}
+/* ===================== 카드형 리디자인 ===================== */
+.acchead{display:flex;align-items:center;gap:10px;margin-top:18px;}
+.hero{position:relative;overflow:hidden;
+  background:linear-gradient(158deg,#172420 0%,var(--bg2) 62%);
+  border:1px solid var(--line2);border-radius:18px;padding:20px 18px;margin-top:14px;}
+.hero::after{content:"";position:absolute;right:-50px;top:-72px;width:200px;height:200px;
+  background:radial-gradient(circle,rgba(74,222,128,.15),transparent 70%);pointer-events:none;}
+.hero>*{position:relative;}
+.hl{font-size:11px;color:var(--txt3);font-weight:600;letter-spacing:.07em;}
+.hbig{font-family:'IBM Plex Mono',monospace;font-weight:600;letter-spacing:-.02em;
+  font-size:clamp(26px,8.5vw,34px);margin-top:7px;line-height:1;}
+.heropnl{display:inline-flex;align-items:center;gap:5px;margin-top:11px;
+  font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;
+  padding:5px 11px;border-radius:8px;}
+.heropnl.pos{background:rgba(74,222,128,.14);color:var(--mint);}
+.heropnl.neg{background:rgba(251,113,133,.14);color:var(--coral);}
+.compbar{display:flex;gap:2px;height:11px;border-radius:6px;overflow:hidden;
+  background:var(--bg3);margin-top:18px;}
+.compbar i{height:100%;display:block;min-width:3px;}
+.complegend{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:12px;}
+.cl{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--txt2);}
+.cl .dot{width:8px;height:8px;border-radius:3px;flex-shrink:0;}
+.cl b{font-family:'IBM Plex Mono',monospace;color:var(--txt);font-weight:600;margin-left:1px;}
+.herodiv{height:1px;background:var(--line2);margin:16px 0 14px;}
+.rbctrl{display:flex;align-items:flex-end;gap:12px;}
+.wsumrow{display:flex;justify-content:space-between;align-items:center;margin-top:15px;
+  font-size:12px;color:var(--txt3);font-weight:600;}
+.wsumrow .mono{font-size:13px;font-weight:600;}
+
+.statline{display:flex;margin-top:10px;border:1px solid var(--line);
+  border-radius:13px;overflow:hidden;background:var(--bg2);}
+.stat{flex:1;min-width:0;padding:12px 5px;text-align:center;}
+.stat+.stat{border-left:1px solid var(--line);}
+.stat .sl{font-size:10px;color:var(--txt3);font-weight:600;white-space:nowrap;}
+.stat .sv{font-family:'IBM Plex Mono',monospace;font-size:13.5px;font-weight:600;
+  margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+@media(max-width:359px){
+  .statline{flex-wrap:wrap;}
+  .stat{flex-basis:50%;}
+  .stat:nth-child(n+3){border-top:1px solid var(--line);}
+  .stat:nth-child(3){border-left:none;}
+}
+
+.hcard,.rbcard{background:var(--bg2);border:1px solid var(--line);
+  border-radius:14px;padding:15px;margin-top:10px;transition:border-color .15s;}
+.hcard:hover,.rbcard:hover{border-color:var(--line2);}
+.hcrow{display:flex;align-items:flex-start;gap:10px;}
+.hcname{flex:1;min-width:0;}
+.nameinput{background:none;border:none;border-bottom:1px solid transparent;
+  color:var(--txt);font-size:15px;font-weight:700;font-family:inherit;
+  outline:none;padding:1px 0;width:100%;letter-spacing:-.01em;}
+.nameinput:focus{border-bottom-color:var(--mint);}
+.codeinput{background:none;border:none;color:var(--txt3);
+  font-family:'IBM Plex Mono',monospace;font-size:11px;outline:none;
+  padding:3px 0 0;width:100%;}
+.codeinput:focus{color:var(--mint);}
+.hcval{display:flex;align-items:baseline;justify-content:space-between;
+  gap:10px;margin-top:13px;}
+.hcval .v{font-family:'IBM Plex Mono',monospace;font-size:21px;font-weight:600;}
+.hcval .r{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;}
+.wbar{height:7px;border-radius:4px;background:var(--bg3);overflow:hidden;margin-top:10px;}
+.wbar i{display:block;height:100%;border-radius:4px;transition:width .35s ease;}
+.wmeta{display:flex;justify-content:space-between;gap:8px;margin-top:7px;
+  font-size:11px;color:var(--txt3);}
+.wmeta b{font-family:'IBM Plex Mono',monospace;color:var(--txt2);font-weight:600;}
+.fields{display:flex;gap:7px;margin-top:14px;}
+.field{flex:1;min-width:0;}
+.fl{font-size:10px;color:var(--txt3);font-weight:600;margin-bottom:5px;letter-spacing:.02em;}
+.cardinput{width:100%;background:var(--bg3);border:1px solid var(--line);
+  border-radius:8px;padding:8px 9px;font-size:13px;
+  font-family:'IBM Plex Mono',monospace;color:var(--txt);outline:none;
+  text-align:right;transition:.15s;}
+.cardinput:focus{border-color:var(--mint);background:#1f2521;}
+.cashcard{display:flex;align-items:center;gap:12px;background:var(--bg2);
+  border:1px dashed var(--line2);border-radius:14px;padding:14px 15px;margin-top:10px;}
+
+.rbtop{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+.rbname{font-size:15px;font-weight:700;letter-spacing:-.01em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rbcode{font-family:'IBM Plex Mono',monospace;font-size:11px;
+  color:var(--txt3);flex-shrink:0;}
+.wt{display:flex;align-items:center;gap:8px;margin-top:13px;}
+.wt .wl{font-size:11px;color:var(--txt3);font-weight:600;}
+.wtinput{width:60px;background:var(--bg3);border:1px solid var(--line);
+  border-radius:7px;padding:6px 8px;font-family:'IBM Plex Mono',monospace;
+  font-size:14px;text-align:right;color:var(--txt);outline:none;transition:.15s;}
+.wtinput:focus{border-color:var(--mint);background:#1f2521;}
+.rbtarget{font-size:13px;color:var(--mint);font-weight:600;}
+.rbflow{display:flex;align-items:center;justify-content:space-between;
+  gap:10px;margin-top:13px;padding-top:12px;border-top:1px solid var(--line);}
+.rbqty{font-size:12px;color:var(--txt2);}
+.rbqty b{font-family:'IBM Plex Mono',monospace;color:var(--txt);
+  font-weight:600;font-size:14px;}
+.arrow{color:var(--txt3);margin:0 5px;}
+.rbtrade{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.rbresult{display:flex;align-items:center;justify-content:space-between;
+  gap:12px;background:var(--bg2);border:1px solid var(--line2);
+  border-radius:14px;padding:15px;margin-top:14px;}
 </style>
 </head>
 <body>
@@ -408,88 +506,119 @@ function buildPills(){
   el("pills").innerHTML=h;
 }
 
-function portMetricsHTML(stat){
-  return metricHTML("총 평가자산","₩"+won(stat.totalAsset),null,"주식 ₩"+won(stat.stockValue))
-    +metricHTML("총 손익","₩"+won(stat.pnl),stat.pnl>=0?"pos":"neg","납입 ₩"+won(stat.contributed))
-    +metricHTML("총 수익률",pct(stat.totalRet),stat.totalRet>=0?"pos":"neg")
-    +metricHTML("연 환산 수익률",pct0(stat.cagr),"gold","투자 "+stat.months+"개월");
+/* ---- 카드형 빌더 (공용) ---- */
+function compColor(i){return SLICE[i%SLICE.length];}
+function compBarHTML(stat,cash){
+  var total=stat.totalAsset||1,segs="";
+  stat.rows.forEach(function(r,i){
+    if(r.value<=0)return;
+    segs+='<i style="width:'+(r.value/total*100)+'%;background:'+compColor(i)+'"></i>';});
+  if(cash>0)segs+='<i style="width:'+(cash/total*100)+'%;background:#3a443d"></i>';
+  return segs||'<i style="width:100%;background:var(--bg3)"></i>';
 }
-function legendHTML(stat){
-  var h="";
-  stat.rows.filter(function(r){return r.value>0;}).forEach(function(r,i){
-    h+='<div class="legrow"><span class="dot" style="background:'+SLICE[i%SLICE.length]+'"></span>'
-      +'<span style="font-size:13px;color:'+C.txt2+';flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
-      +esc(r.h.name||r.h.code)+'</span>'
-      +'<span class="mono" style="font-size:13px">'+pct0(r.share)+'</span></div>';});
-  return h;
+function compLegendHTML(stat,cash){
+  var total=stat.totalAsset||1,h="";
+  stat.rows.forEach(function(r,i){
+    if(r.value<=0)return;
+    h+='<span class="cl"><span class="dot" style="background:'+compColor(i)+'"></span>'
+      +esc(r.h.name||r.h.code||"종목")+' <b>'+pct0(r.value/total)+'</b></span>';});
+  if(cash>0)h+='<span class="cl"><span class="dot" style="background:#3a443d"></span>'
+    +'현금 <b>'+pct0(cash/total)+'</b></span>';
+  return h||'<span class="note">보유 종목이 없습니다</span>';
 }
-function donutSegs(stat){
-  return stat.rows.filter(function(r){return r.value>0;}).map(function(r,i){
-    return {value:r.value,color:SLICE[i%SLICE.length]};});
+function portStatStrip(stat){
+  function cell(l,v,tone){
+    var col=tone==="pos"?C.mint:tone==="neg"?C.coral:tone==="gold"?C.gold:C.txt;
+    return '<div class="stat"><div class="sl">'+esc(l)+'</div>'
+      +'<div class="sv" style="color:'+col+'">'+esc(v)+'</div></div>';}
+  return cell("총 수익률",pct(stat.totalRet),stat.totalRet>=0?"pos":"neg")
+    +cell("연 환산",pct0(stat.cagr),"gold")
+    +cell("총 납입금","₩"+won(stat.contributed))
+    +cell("투자 기간",stat.months+"개월");
+}
+function portHeroHTML(stat,cash){
+  var pos=stat.pnl>=0;
+  return '<div class="hero">'
+    +'<div class="hl">총 평가자산</div>'
+    +'<div class="hbig" id="h_big">₩'+won(stat.totalAsset)+'</div>'
+    +'<div class="heropnl '+(pos?"pos":"neg")+'" id="h_pnl">'
+      +(pos?"▲":"▼")+' ₩'+won(Math.abs(stat.pnl))+' · '+pct(stat.totalRet)+'</div>'
+    +'<div class="compbar" id="h_comp">'+compBarHTML(stat,cash)+'</div>'
+    +'<div class="complegend" id="h_leg">'+compLegendHTML(stat,cash)+'</div>'
+    +'</div>';
+}
+function holdingCardHTML(r,i){
+  var h=r.h;
+  return '<div class="hcard">'
+    +'<div class="hcrow"><div class="hcname">'
+      +'<input class="nameinput" data-edit="h-name" data-id="'+h.id+'" value="'+esc(h.name)+'" placeholder="상품명">'
+      +'<input class="codeinput" data-edit="h-code" data-id="'+h.id+'" value="'+esc(h.code)+'" placeholder="종목코드">'
+    +'</div><button class="x" data-act="del-h" data-id="'+h.id+'">✕</button></div>'
+    +'<div class="hcval"><span class="v" id="pv_'+h.id+'">₩'+won(r.value)+'</span>'
+      +'<span class="r" id="pr_'+h.id+'" style="color:'+(r.ret>=0?C.mint:C.coral)+'">'+pct(r.ret)+'</span></div>'
+    +'<div class="wbar"><i id="pwf_'+h.id+'" style="width:'+(r.share*100)+'%;background:'+compColor(i)+'"></i></div>'
+    +'<div class="wmeta"><span>비중 <b id="pwp_'+h.id+'">'+pct0(r.share)+'</b></span>'
+      +'<span>매입금액 <b id="pc_'+h.id+'">₩'+won(r.cost)+'</b></span></div>'
+    +'<div class="fields">'
+      +'<div class="field"><div class="fl">매입단가</div>'
+        +'<input class="cardinput" data-edit="h-avg" data-id="'+h.id+'" inputmode="decimal" value="'+won(h.avg)+'"></div>'
+      +'<div class="field"><div class="fl">보유수량</div>'
+        +'<input class="cardinput" data-edit="h-qty" data-id="'+h.id+'" inputmode="decimal" value="'+won(h.qty)+'"></div>'
+      +'<div class="field"><div class="fl">현재가</div>'
+        +'<input class="cardinput" data-edit="price" data-code="'+esc(h.code)+'" inputmode="decimal" value="'+won(r.price)+'"></div>'
+    +'</div></div>';
+}
+function cashCardHTML(acc){
+  return '<div class="cashcard">'
+    +'<div style="flex:1;min-width:0"><div class="fl" style="margin:0">예수금 (현금)</div>'
+    +'<div class="note" style="margin-top:3px">리밸런싱·매수에 쓰는 현금</div></div>'
+    +'<input class="cardinput" data-edit="cash" inputmode="decimal" value="'+won(acc.cash)+'" style="width:118px">'
+    +'</div>';
 }
 
 /* ---- 포트폴리오 탭 ---- */
 function viewPort(acc){
   var stat=calcAccount(acc,state.prices);
-  var rows="";
-  stat.rows.forEach(function(r){
-    var h=r.h;
-    rows+='<tr>'
-      +'<td style="text-align:left">'
-      +'<input class="input t" data-edit="h-name" data-id="'+h.id+'" value="'+esc(h.name)+'" placeholder="상품명" style="width:150px">'
-      +'<div style="margin-top:4px"><input class="input" data-edit="h-code" data-id="'+h.id+'" value="'+esc(h.code)+'" placeholder="종목코드" style="width:150px"></div></td>'
-      +'<td><input class="input" data-edit="h-avg" data-id="'+h.id+'" inputmode="decimal" value="'+won(h.avg)+'" style="width:80px;text-align:right"></td>'
-      +'<td><input class="input" data-edit="h-qty" data-id="'+h.id+'" inputmode="decimal" value="'+won(h.qty)+'" style="width:72px;text-align:right"></td>'
-      +'<td class="num dim" id="c_'+h.id+'_cost">'+won(r.cost)+'</td>'
-      +'<td><input class="input" data-edit="price" data-code="'+esc(h.code)+'" inputmode="decimal" value="'+won(r.price)+'" style="width:80px;text-align:right"></td>'
-      +'<td class="num" id="c_'+h.id+'_val">'+won(r.value)+'</td>'
-      +'<td class="num" id="c_'+h.id+'_ret" style="color:'+(r.ret>=0?C.mint:C.coral)+'">'+pct(r.ret)+'</td>'
-      +'<td class="num dim" id="c_'+h.id+'_shr">'+pct0(r.share)+'</td>'
-      +'<td><button class="x" data-act="del-h" data-id="'+h.id+'">✕</button></td></tr>';});
-  var tret=stat.stockCost?(stat.stockValue/stat.stockCost-1):0;
+  var cards="";
+  stat.rows.forEach(function(r,i){cards+=holdingCardHTML(r,i);});
+  if(!cards)cards='<div class="note" style="text-align:center;padding:26px 14px;line-height:1.8">'
+    +'보유 종목이 없습니다.<br>아래 <b style="color:var(--mint)">+ 종목</b> 으로 추가하세요.</div>';
   return '<div class="fade">'
-    +'<div class="row" style="gap:8px;margin-top:14px">'
-    +'<input class="titleinput" data-edit="acc-name" value="'+esc(acc.name)+'">'
-    +'<button class="ghost" data-act="del-acc">계좌 삭제</button></div>'
-    +'<div class="metrics" id="m_port" style="margin-top:14px">'+portMetricsHTML(stat)+'</div>'
-    +'<div class="card" style="display:flex;flex-wrap:wrap;gap:20px;align-items:center">'
-    +'<div id="d_port" style="flex-shrink:0">'+donutSVG(donutSegs(stat),170)+'</div>'
-    +'<div style="flex:1;min-width:220px">'
-    +'<div class="lbl">현재 포트폴리오 비중</div>'
-    +'<div id="lg_port">'+legendHTML(stat)+'</div>'
-    +'<div class="legrow" style="margin-top:10px;padding-top:10px;border-top:1px solid '+C.line+'">'
-    +'<span style="font-size:13px;color:'+C.txt2+';flex:1">예수금 (현금)</span>'
-    +'<input class="input" data-edit="cash" inputmode="decimal" value="'+won(acc.cash)+'" style="width:110px;text-align:right">'
-    +'<span style="color:'+C.txt3+';font-size:12px">원</span></div></div></div>'
-    +bar("보유 종목",'<button class="ghost" data-act="refresh-prices"'+(ui.fetching?" disabled":"")+'>'+(ui.fetching?"시세 갱신 중…":"↻ 시세 갱신")+'</button> <button class="ghost" data-act="add-h">+ 종목</button>')
-    +'<div class="tablewrap"><table><thead><tr>'
-    +'<th style="text-align:left;min-width:150px">종목</th><th>매입단가</th><th>보유수량</th>'
-    +'<th>매입금액</th><th>현재가</th><th>평가금액</th><th>수익률</th><th>비중</th><th></th>'
-    +'</tr></thead><tbody>'+rows
-    +'<tr class="total"><td class="lbl" style="text-align:left">합계</td><td></td><td></td>'
-    +'<td class="num" id="c_t_cost">'+won(stat.stockCost)+'</td><td></td>'
-    +'<td class="num" id="c_t_val">'+won(stat.stockValue)+'</td>'
-    +'<td class="num" id="c_t_ret" style="color:'+(tret>=0?C.mint:C.coral)+'">'+pct(tret)+'</td>'
-    +'<td class="num">100%</td><td></td></tr>'
-    +'</tbody></table></div>'
-    +'<div class="note" style="margin-top:8px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px"><span>마지막 시세 갱신: '+fmtTime(state.lastFetch)+' \u00b7 Yahoo Finance</span><button class="linkbtn" data-act="toggle-proxy">\u2699 시세 설정</button></div>'
+    +'<div class="acchead">'
+      +'<input class="titleinput" data-edit="acc-name" value="'+esc(acc.name)+'" style="flex:1;min-width:0">'
+      +'<button class="ghost" data-act="del-acc">계좌 삭제</button></div>'
+    +portHeroHTML(stat,acc.cash)
+    +'<div class="statline" id="m_port">'+portStatStrip(stat)+'</div>'
+    +bar("보유 종목",'<button class="ghost" data-act="refresh-prices"'+(ui.fetching?" disabled":"")
+      +'>'+(ui.fetching?"갱신 중…":"↻ 시세")+'</button> <button class="ghost" data-act="add-h">+ 종목</button>')
+    +cards
+    +cashCardHTML(acc)
+    +'<div class="note" style="margin-top:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">'
+      +'<span>마지막 시세 갱신: '+fmtTime(state.lastFetch)+' · Yahoo Finance</span>'
+      +'<button class="linkbtn" data-act="toggle-proxy">⚙ 시세 설정</button></div>'
     +(ui.showProxy?proxyPanel():"")
     +'</div>';
 }
 function softPort(acc){
   var stat=calcAccount(acc,state.prices);
-  if(el("m_port"))el("m_port").innerHTML=portMetricsHTML(stat);
-  if(el("d_port"))el("d_port").innerHTML=donutSVG(donutSegs(stat),170);
-  if(el("lg_port"))el("lg_port").innerHTML=legendHTML(stat);
-  stat.rows.forEach(function(r){
-    setT("c_"+r.h.id+"_cost",won(r.cost));
-    setT("c_"+r.h.id+"_val",won(r.value));
-    setT("c_"+r.h.id+"_ret",pct(r.ret),r.ret>=0?C.mint:C.coral);
-    setT("c_"+r.h.id+"_shr",pct0(r.share));});
-  var tret=stat.stockCost?(stat.stockValue/stat.stockCost-1):0;
-  setT("c_t_cost",won(stat.stockCost));
-  setT("c_t_val",won(stat.stockValue));
-  setT("c_t_ret",pct(tret),tret>=0?C.mint:C.coral);
+  setT("h_big","₩"+won(stat.totalAsset));
+  var hp=el("h_pnl");
+  if(hp){
+    var pos=stat.pnl>=0;
+    hp.className="heropnl "+(pos?"pos":"neg");
+    hp.textContent=(pos?"▲":"▼")+" ₩"+won(Math.abs(stat.pnl))+" · "+pct(stat.totalRet);
+  }
+  if(el("h_comp"))el("h_comp").innerHTML=compBarHTML(stat,acc.cash);
+  if(el("h_leg"))el("h_leg").innerHTML=compLegendHTML(stat,acc.cash);
+  if(el("m_port"))el("m_port").innerHTML=portStatStrip(stat);
+  stat.rows.forEach(function(r,i){
+    setT("pv_"+r.h.id,"₩"+won(r.value));
+    setT("pr_"+r.h.id,pct(r.ret),r.ret>=0?C.mint:C.coral);
+    setT("pc_"+r.h.id,"₩"+won(r.cost));
+    setT("pwp_"+r.h.id,pct0(r.share));
+    var f=el("pwf_"+r.h.id);
+    if(f){f.style.width=(r.share*100)+"%";f.style.background=compColor(i);}
+  });
 }
 
 /* ---- 리밸런싱 탭 ---- */
@@ -497,47 +626,65 @@ function adjCellHTML(adj){
   if(adj===0)return '<span style="color:'+C.txt3+'">—</span>';
   return '<span class="badge '+(adj>0?"buy":"sell")+'">'+(adj>0?"매수":"매도")+' '+Math.abs(adj)+'</span>';
 }
+function rebalHeroHTML(acc,stat,rb){
+  var off=Math.abs(rb.wsum-100)>0.5;
+  return '<div class="hero">'
+    +'<div class="hl">리밸런싱 대상 금액</div>'
+    +'<div class="hbig" id="r_base">₩'+won(rb.base)+'</div>'
+    +'<div class="note" id="r_baseinfo" style="margin-top:6px">평가액 '+won(stat.stockValue)
+      +' + 현금 '+won(acc.cash)+(ui.addMoney>0?' + 추가 '+won(ui.addMoney):'')+'</div>'
+    +'<div class="herodiv"></div>'
+    +'<div class="rbctrl">'
+      +'<div class="field" style="flex:0 0 auto"><div class="fl">이번 추가 납입금</div>'
+        +'<input class="cardinput" data-edit="addmoney" inputmode="decimal" value="'+won(ui.addMoney)+'" style="width:128px"></div>'
+      +'<div style="flex:1"></div>'
+      +'<button class="ghost" data-act="equalize">균등 배분</button></div>'
+    +'<div class="wsumrow"><span>목표 비중 합계</span>'
+      +'<span class="mono" id="r_wsum" style="color:'+(off?C.coral:C.mint)+'">'
+      +rb.wsum.toFixed(1)+'%'+(off?" ⚠":" ✓")+'</span></div>'
+    +'</div>';
+}
+function rebalCardHTML(r,i){
+  var h=r.h;
+  return '<div class="rbcard">'
+    +'<div class="rbtop"><span class="rbname">'+esc(h.name||"—")+'</span>'
+      +'<span class="rbcode">'+esc(h.code||"")+'</span></div>'
+    +'<div class="wt"><span class="wl">목표비중</span>'
+      +'<input class="wtinput" data-edit="weight" data-id="'+h.id+'" inputmode="decimal" value="'+(h.weight||0)+'">'
+      +'<span style="color:var(--txt3);font-size:12px">%</span><span style="flex:1"></span>'
+      +'<span class="rbtarget mono" id="r_'+h.id+'_amt">₩'+won(r.targetAmt)+'</span></div>'
+    +'<div class="wbar"><i id="r_'+h.id+'_wf" style="width:'+Math.min(h.weight||0,100)
+      +'%;background:'+compColor(i)+'"></i></div>'
+    +'<div class="rbflow">'
+      +'<span class="rbqty">보유 <b>'+won(h.qty)+'</b><span class="arrow">→</span>'
+      +'목표 <b id="r_'+h.id+'_tq">'+won(r.targetQty)+'</b></span>'
+      +'<span class="rbtrade"><span id="r_'+h.id+'_adj">'+adjCellHTML(r.adjQty)+'</span>'
+      +'<span class="mono" id="r_'+h.id+'_trd" style="color:'
+      +(r.adjQty>0?C.coral:r.adjQty<0?C.mint:C.txt3)+'">'
+      +(r.adjQty===0?"—":(r.tradeAmt>0?"−":"+")+won(Math.abs(r.tradeAmt)))+'</span></span>'
+    +'</div></div>';
+}
 function viewRebal(acc){
   var stat=calcAccount(acc,state.prices);
   var rb=calcRebalance(acc,state.prices,stat,ui.addMoney);
   var off=Math.abs(rb.wsum-100)>0.5;
-  var rows="";
-  rb.rows.forEach(function(r){
-    var h=r.h;
-    rows+='<tr>'
-      +'<td style="text-align:left"><div style="font-size:13px;font-weight:500">'+esc(h.name||"—")+'</div>'
-      +'<div class="mono" style="font-size:11px;color:'+C.txt3+'">'+esc(h.code)+'</div></td>'
-      +'<td><input class="input" data-edit="weight" data-id="'+h.id+'" inputmode="decimal" value="'+(h.weight||0)+'" style="width:50px;text-align:right"><span style="color:'+C.txt3+';font-size:12px">%</span></td>'
-      +'<td class="num dim" id="r_'+h.id+'_amt">'+won(r.targetAmt)+'</td>'
-      +'<td class="num dim">'+won(r.price)+'</td>'
-      +'<td class="num dim">'+won(h.qty)+'</td>'
-      +'<td class="num" id="r_'+h.id+'_tq" style="font-weight:600">'+won(r.targetQty)+'</td>'
-      +'<td class="num" id="r_'+h.id+'_adj">'+adjCellHTML(r.adjQty)+'</td>'
-      +'<td class="num" id="r_'+h.id+'_trd" style="color:'+(r.adjQty>0?C.coral:r.adjQty<0?C.mint:C.txt3)+'">'
-      +(r.adjQty===0?"—":(r.tradeAmt>0?"−":"+")+won(Math.abs(r.tradeAmt)))+'</td></tr>';});
+  var cards="";
+  rb.rows.forEach(function(r,i){cards+=rebalCardHTML(r,i);});
+  if(!cards)cards='<div class="note" style="text-align:center;padding:26px 14px">'
+    +'보유 종목이 없습니다. 포트폴리오 탭에서 종목을 추가하세요.</div>';
   return '<div class="fade">'
     +bar("리밸런싱 계산기")
-    +'<div class="card" style="display:flex;flex-wrap:wrap;gap:18px;align-items:center">'
-    +'<div><div class="lbl">이번에 추가 납입할 금액</div>'
-    +'<input class="input" data-edit="addmoney" inputmode="decimal" value="'+won(ui.addMoney)+'" style="width:130px;text-align:right"><span style="color:'+C.txt3+';font-size:12px">원</span></div>'
-    +'<div class="divider"></div>'
-    +'<div><div class="lbl">리밸런싱 대상 금액</div>'
-    +'<div class="mono" id="r_base" style="font-size:18px;color:'+C.mint+';margin-top:3px">₩'+won(rb.base)+'</div>'
-    +'<div class="note" id="r_baseinfo">평가액 '+won(stat.stockValue)+' + 현금 '+won(acc.cash)
-    +(ui.addMoney>0?' + 추가 '+won(ui.addMoney):'')+'</div></div>'
-    +'<div style="flex:1"></div>'
-    +'<button class="ghost" data-act="equalize">균등 배분</button></div>'
-    +bar("목표 배분",'<span class="mono" id="r_wsum" style="font-size:12px;color:'+(off?C.coral:C.mint)+'">비중 합계 '+rb.wsum.toFixed(1)+'%</span>')
-    +'<div class="tablewrap"><table><thead><tr>'
-    +'<th style="text-align:left;min-width:120px">종목</th><th>목표비중</th><th>목표금액</th>'
-    +'<th>현재가</th><th>현재수량</th><th>목표수량</th><th>조정</th><th>거래금액</th>'
-    +'</tr></thead><tbody>'+rows+'</tbody></table></div>'
-    +'<div class="card" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center">'
-    +'<div><div class="lbl">리밸런싱 후 잔여 현금</div>'
-    +'<div class="mono" id="r_left" style="font-size:16px;margin-top:3px;color:'+(rb.leftover<0?C.coral:C.txt)+'">₩'+won(rb.leftover)+'</div></div>'
-    +'<div style="flex:1"></div>'
-    +'<button class="btn" id="r_apply" data-act="apply-rebal"'+(off?" disabled":"")+'>리밸런싱 실행 →</button></div>'
-    +'<p class="note" style="margin-top:8px">실행하면 보유수량이 목표수량으로 바뀌고, 매수분만큼 평균단가가 재계산되며, 잔여 현금이 예수금으로 반영됩니다. 추가 납입액을 입력했다면 납입 내역에도 자동 기록됩니다.</p>'
+    +rebalHeroHTML(acc,stat,rb)
+    +bar("종목별 목표 배분")
+    +cards
+    +'<div class="rbresult">'
+      +'<div><div class="fl" style="margin:0">리밸런싱 후 잔여 현금</div>'
+      +'<div class="mono" id="r_left" style="font-size:17px;margin-top:3px;color:'
+      +(rb.leftover<0?C.coral:C.txt)+'">₩'+won(rb.leftover)+'</div></div>'
+      +'<button class="btn" id="r_apply" data-act="apply-rebal"'+(off?" disabled":"")+'>리밸런싱 실행 →</button>'
+    +'</div>'
+    +'<p class="note" style="margin-top:10px">실행하면 보유수량이 목표수량으로 바뀌고, 매수분만큼 평균단가가 '
+    +'재계산되며, 잔여 현금이 예수금으로 반영됩니다. 추가 납입액을 입력했다면 납입 내역에도 자동 기록됩니다.</p>'
     +'</div>';
 }
 function softRebal(acc){
@@ -545,16 +692,19 @@ function softRebal(acc){
   var rb=calcRebalance(acc,state.prices,stat,ui.addMoney);
   var off=Math.abs(rb.wsum-100)>0.5;
   setT("r_base","₩"+won(rb.base));
-  if(el("r_baseinfo"))el("r_baseinfo").textContent="평가액 "+won(stat.stockValue)+" + 현금 "+won(acc.cash)
-    +(ui.addMoney>0?" + 추가 "+won(ui.addMoney):"");
-  setT("r_wsum","비중 합계 "+rb.wsum.toFixed(1)+"%",off?C.coral:C.mint);
+  if(el("r_baseinfo"))el("r_baseinfo").textContent="평가액 "+won(stat.stockValue)
+    +" + 현금 "+won(acc.cash)+(ui.addMoney>0?" + 추가 "+won(ui.addMoney):"");
+  setT("r_wsum",rb.wsum.toFixed(1)+"%"+(off?" ⚠":" ✓"),off?C.coral:C.mint);
   setT("r_left","₩"+won(rb.leftover),rb.leftover<0?C.coral:C.txt);
   rb.rows.forEach(function(r){
-    setT("r_"+r.h.id+"_amt",won(r.targetAmt));
+    setT("r_"+r.h.id+"_amt","₩"+won(r.targetAmt));
     setT("r_"+r.h.id+"_tq",won(r.targetQty));
+    var wf=el("r_"+r.h.id+"_wf");
+    if(wf)wf.style.width=Math.min(r.h.weight||0,100)+"%";
     if(el("r_"+r.h.id+"_adj"))el("r_"+r.h.id+"_adj").innerHTML=adjCellHTML(r.adjQty);
     setT("r_"+r.h.id+"_trd",r.adjQty===0?"—":(r.tradeAmt>0?"−":"+")+won(Math.abs(r.tradeAmt)),
-      r.adjQty>0?C.coral:r.adjQty<0?C.mint:C.txt3);});
+      r.adjQty>0?C.coral:r.adjQty<0?C.mint:C.txt3);
+  });
   if(el("r_apply"))el("r_apply").disabled=off;
 }
 
