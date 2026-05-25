@@ -186,14 +186,18 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 .wmeta{display:flex;justify-content:space-between;gap:8px;margin-top:7px;
   font-size:11px;color:var(--txt3);}
 .wmeta b{font-family:'IBM Plex Mono',monospace;color:var(--txt2);font-weight:600;}
-.fields{display:flex;gap:7px;margin-top:14px;}
-.field{flex:1;min-width:0;}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px;}
+.field{min-width:0;}
 .fl{font-size:10px;color:var(--txt3);font-weight:600;margin-bottom:5px;letter-spacing:.02em;}
-.cardinput{width:100%;background:var(--bg3);border:1px solid var(--line);
+.cardinput{width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--line);
   border-radius:8px;padding:8px 9px;font-size:13px;
   font-family:'IBM Plex Mono',monospace;color:var(--txt);outline:none;
   text-align:right;transition:.15s;}
 .cardinput:focus{border-color:var(--mint);background:#1f2521;}
+.cardstatic{width:100%;box-sizing:border-box;background:transparent;
+  border:1px solid var(--line);border-radius:8px;padding:8px 9px;font-size:13px;
+  font-family:'IBM Plex Mono',monospace;color:var(--txt2);text-align:right;}
+.cardstatic .sub{font-size:10px;color:var(--txt3);}
 .cashcard{display:flex;align-items:center;gap:12px;background:var(--bg2);
   border:1px dashed var(--line2);border-radius:14px;padding:14px 15px;margin-top:10px;}
 
@@ -344,8 +348,8 @@ function seed(){
   function cs(rows){return rows.map(function(r){return {id:uid(),date:r[0],memo:r[1],amount:r[2]};});}
   return {prices:{"000001":10000,"000002":20000},accounts:[
     {id:uid(),name:"예시 계좌",cash:50000,holdings:[
-      {id:uid(),code:"000001",name:"예시 종목 A",avg:9000,qty:100,weight:60,memo:""},
-      {id:uid(),code:"000002",name:"예시 종목 B",avg:18000,qty:50,weight:40,memo:""}],
+      {id:uid(),code:"000001",name:"예시 종목 A",cost:900000,qty:100,weight:60},
+      {id:uid(),code:"000002",name:"예시 종목 B",cost:900000,qty:50,weight:40}],
      contributions:cs([["2025-01-02","초기 납입",2000000],
       ["2025-02-03","",300000],["2025-03-03","",300000]])}
   ]};
@@ -354,7 +358,7 @@ function seed(){
 /* ===================== 계산 ===================== */
 function calcAccount(acc,prices){
   var rows=acc.holdings.map(function(h){
-    var price=prices[h.code]||0,cost=h.avg*h.qty,value=price*h.qty;
+    var price=prices[h.code]||0,cost=h.cost||0,value=price*h.qty;
     return {h:h,price:price,cost:cost,value:value,ret:cost>0?value/cost-1:0};});
   var stockValue=rows.reduce(function(s,r){return s+r.value;},0);
   var stockCost=rows.reduce(function(s,r){return s+r.cost;},0);
@@ -461,9 +465,13 @@ function consolidate(st){
       if(!h.id)h.id=uid();
       if(typeof h.code!=="string")h.code=String(h.code||"");
       if(typeof h.name!=="string")h.name=String(h.name||"");
-      if(typeof h.avg!=="number"||isNaN(h.avg))h.avg=0;
       if(typeof h.qty!=="number"||isNaN(h.qty))h.qty=0;
       if(typeof h.weight!=="number"||isNaN(h.weight))h.weight=0;
+      if(typeof h.cost!=="number"||isNaN(h.cost)){
+        // 옛 데이터: 매입단가(avg)×수량 → 총 매입금액(cost)으로 변환
+        h.cost=Math.round((typeof h.avg==="number"?h.avg:0)*(h.qty||0));
+      }
+      delete h.avg;
     });
     var map={};
     a.contributions.forEach(function(c){
@@ -657,6 +665,9 @@ function portHeroHTML(stat,cash){
 }
 function holdingCardHTML(r,i){
   var h=r.h;
+  var pnl=r.value-r.cost;
+  var avg=h.qty>0?r.cost/h.qty:0;
+  var priceTxt=r.price>0?"₩"+won(r.price):'<span class="sub">시세 없음</span>';
   return '<div class="hcard">'
     +'<div class="hcrow"><div class="hcname">'
       +'<input class="nameinput" data-edit="h-name" data-id="'+h.id+'" value="'+esc(h.name)+'" placeholder="상품명">'
@@ -666,14 +677,17 @@ function holdingCardHTML(r,i){
       +'<span class="r" id="pr_'+h.id+'" style="color:'+(r.ret>=0?C.mint:C.coral)+'">'+pct(r.ret)+'</span></div>'
     +'<div class="wbar"><i id="pwf_'+h.id+'" style="width:'+(r.share*100)+'%;background:'+compColor(i)+'"></i></div>'
     +'<div class="wmeta"><span>비중 <b id="pwp_'+h.id+'">'+pct0(r.share)+'</b></span>'
-      +'<span>매입금액 <b id="pc_'+h.id+'">₩'+won(r.cost)+'</b></span></div>'
+      +'<span>평가손익 <b id="pl_'+h.id+'" style="color:'+(pnl>=0?C.mint:C.coral)+'">'
+      +(pnl>=0?"+":"−")+'₩'+won(Math.abs(pnl))+'</b></span></div>'
     +'<div class="fields">'
-      +'<div class="field"><div class="fl">매입단가</div>'
-        +'<input class="cardinput" data-edit="h-avg" data-id="'+h.id+'" inputmode="decimal" value="'+won(h.avg)+'"></div>'
+      +'<div class="field"><div class="fl">총 매입금액</div>'
+        +'<input class="cardinput" data-edit="h-cost" data-id="'+h.id+'" inputmode="decimal" value="'+won(h.cost||0)+'"></div>'
       +'<div class="field"><div class="fl">보유수량</div>'
         +'<input class="cardinput" data-edit="h-qty" data-id="'+h.id+'" inputmode="decimal" value="'+won(h.qty)+'"></div>'
-      +'<div class="field"><div class="fl">현재가</div>'
-        +'<input class="cardinput" data-edit="price" data-id="'+h.id+'" inputmode="decimal" value="'+won(r.price)+'"></div>'
+      +'<div class="field"><div class="fl">매입단가 (자동)</div>'
+        +'<div class="cardstatic" id="pa_'+h.id+'">₩'+won(Math.round(avg))+'</div></div>'
+      +'<div class="field"><div class="fl">현재가 (시세)</div>'
+        +'<div class="cardstatic" id="pp_'+h.id+'">'+priceTxt+'</div></div>'
     +'</div></div>';
 }
 function cashCardHTML(acc){
@@ -733,7 +747,12 @@ function softPort(acc){
   stat.rows.forEach(function(r,i){
     setT("pv_"+r.h.id,"₩"+won(r.value));
     setT("pr_"+r.h.id,pct(r.ret),r.ret>=0?C.mint:C.coral);
-    setT("pc_"+r.h.id,"₩"+won(r.cost));
+    var pnl=r.value-r.cost;
+    setT("pl_"+r.h.id,(pnl>=0?"+":"−")+"₩"+won(Math.abs(pnl)),pnl>=0?C.mint:C.coral);
+    var avg=r.h.qty>0?r.cost/r.h.qty:0;
+    setT("pa_"+r.h.id,"₩"+won(Math.round(avg)));
+    var pp=el("pp_"+r.h.id);
+    if(pp)pp.innerHTML=r.price>0?"₩"+won(r.price):'<span class="sub">시세 없음</span>';
     setT("pwp_"+r.h.id,pct0(r.share));
     var f=el("pwf_"+r.h.id);
     if(f){f.style.width=(r.share*100)+"%";f.style.background=compColor(i);}
@@ -995,8 +1014,13 @@ function applyRebalance(acc){
     undoState=JSON.parse(JSON.stringify(state));
     rb.rows.forEach(function(r){
       var h=r.h,delta=r.adjQty;
-      if(delta>0){var nq=h.qty+delta;h.avg=Math.round(nq>0?(h.qty*h.avg+delta*r.price)/nq:r.price);}
-      h.qty=r.targetQty;});
+      if(delta>0){
+        h.cost=(h.cost||0)+delta*r.price;                     // 매수분만큼 매입금액 가산
+      }else if(delta<0&&h.qty>0){
+        h.cost=Math.round((h.cost||0)*r.targetQty/h.qty);     // 매도분만큼 매입금액 비례 차감
+      }
+      h.qty=r.targetQty;
+    });
     acc.cash=Math.round(rb.leftover);
     acc.deployedYM=latestYM(acc)||acc.deployedYM||"";   // 현재까지의 납입 = 모두 반영 완료
     save();render();
@@ -1031,7 +1055,7 @@ el("app").addEventListener("click",function(e){
       ui.accId=null;render();toast("계좌를 삭제했습니다.");
     },true,"삭제");}
   else if(act==="add-h"){patch(function(){
-    acc.holdings.push({id:uid(),code:"",name:"새 종목",avg:0,qty:0,weight:0});});render();}
+    acc.holdings.push({id:uid(),code:"",name:"새 종목",cost:0,qty:0,weight:0});});render();}
   else if(act==="del-h"){var hid=t.getAttribute("data-id");
     patch(function(){acc.holdings=acc.holdings.filter(function(h){return h.id!==hid;});});render();}
   else if(act==="equalize"){var n=acc.holdings.length||1;var w=Math.round(1000/n)/10;
@@ -1098,11 +1122,6 @@ el("app").addEventListener("input",function(e){
   var acc=activeAcc();
   if(f==="acc-name"&&acc){acc.name=t.value;buildPills();save();return;}
   if(f==="cash"&&acc){acc.cash=num(t.value);save();softRefresh();return;}
-  if(f==="price"&&acc){
-    var pid=t.getAttribute("data-id");
-    var ph=acc.holdings.filter(function(x){return x.id===pid;})[0];
-    if(ph&&ph.code){state.prices[ph.code]=num(t.value);save();softRefresh();}
-    return;}
   if(f==="proxyurl"){state.proxyUrl=t.value.trim();save();return;}
   if(f==="contrib"&&acc){
     var ym=t.getAttribute("data-ym"),cv=num(t.value),ent=null;
@@ -1120,7 +1139,7 @@ el("app").addEventListener("input",function(e){
   if(!h)return;
   if(f==="h-name")h.name=t.value;
   else if(f==="h-code")h.code=t.value;
-  else if(f==="h-avg")h.avg=Math.max(0,num(t.value));
+  else if(f==="h-cost")h.cost=Math.max(0,num(t.value));
   else if(f==="h-qty")h.qty=Math.max(0,num(t.value));
   else if(f==="weight")h.weight=Math.max(0,num(t.value));
   save();softRefresh();
