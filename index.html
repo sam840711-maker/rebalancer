@@ -300,16 +300,33 @@ function pendingContrib(acc){
   return {amount:amount,count:items.length,label:label};
 }
 /* 리밸런싱: 예수금 + 이번 추가 납입액까지 반영한 목표 평가자산(base)을 기준으로
-   각 종목의 목표수량을 구하고, 현재 보유수량과의 차이만큼 매수/매도 수량을 산출한다. */
+   각 종목의 목표수량을 구하고, 현재 보유수량과의 차이만큼 매수/매도 수량을 산출한다.
+   1차: 내림으로 초과 매수 방지 → 2차: 남은 현금으로 가장 부족한 종목부터 1주씩 추가. */
 function calcRebalance(acc,prices,stat,addMoney){
   var base=stat.stockValue+acc.cash+(addMoney||0);
   var wsum=acc.holdings.reduce(function(s,h){return s+(h.weight||0);},0);
   var rows=acc.holdings.map(function(h){
     var price=prices[h.code]||0;
     var targetAmt=base*((h.weight||0)/100);
-    var targetQty=price>0?Math.floor(targetAmt/price):0;  // 내림: 추가 투입 없이 잔여현금 항상 ≥0
-    var adjQty=targetQty-h.qty;                 // +면 매수, -면 매도
-    return {h:h,price:price,targetAmt:targetAmt,targetQty:targetQty,adjQty:adjQty,tradeAmt:adjQty*price};});
+    var targetQty=price>0?Math.floor(targetAmt/price):0;  // 1차: 내림(추가 투입 방지)
+    return {h:h,price:price,targetAmt:targetAmt,targetQty:targetQty};});
+  // 2차: 남은 현금으로 목표금액 대비 가장 부족한 종목부터 1주씩 추가 매수(잔여 ≥0 유지)
+  var leftover=base-rows.reduce(function(s,r){return s+r.targetQty*r.price;},0);
+  for(var guard=0;guard<100000;guard++){
+    var pick=null,best=-Infinity;
+    rows.forEach(function(r){
+      if(r.price>0&&r.price<=leftover){
+        var shortfall=r.targetAmt-r.targetQty*r.price;   // 목표금액 대비 부족분
+        if(shortfall>best){best=shortfall;pick=r;}
+      }
+    });
+    if(!pick)break;
+    pick.targetQty++;leftover-=pick.price;
+  }
+  rows.forEach(function(r){
+    r.adjQty=r.targetQty-r.h.qty;                 // +면 매수, -면 매도
+    r.tradeAmt=r.adjQty*r.price;
+  });
   var invested=rows.reduce(function(s,r){return s+r.targetQty*r.price;},0);
   return {base:base,wsum:wsum,rows:rows,invested:invested,leftover:base-invested};
 }
