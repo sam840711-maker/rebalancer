@@ -104,6 +104,10 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 .foot{display:flex;gap:8px;flex-wrap:wrap;margin-top:30px;padding-top:18px;border-top:1px solid var(--line);}
 .divider{height:34px;width:1px;background:var(--line);}
 .empty{text-align:center;color:var(--txt2);padding:64px 20px;font-size:14px;line-height:1.9;}
+.linkbtn{background:none;border:none;color:var(--txt3);font-family:inherit;font-size:11px;cursor:pointer;text-decoration:underline;padding:0;}
+.linkbtn:hover{color:var(--mint);}
+.codebox-wrap{margin-top:12px;}
+.codebox{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--txt2);overflow-x:auto;white-space:pre;line-height:1.5;margin:0;}
 .ycard{background:var(--bg2);border:1px solid var(--line);border-radius:12px;margin-top:10px;overflow:hidden;}
 .yhead{display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;padding:15px 16px;cursor:pointer;font-family:inherit;text-align:left;transition:.12s;}
 .yhead:hover{background:var(--bg3);}
@@ -274,10 +278,109 @@ function areaSVG(data){
     +'</svg>';
 }
 
+/* ===================== 실시간 시세: Yahoo Finance ===================== */
+/* Yahoo Finance 를 프록시 경유로 호출(브라우저 CORS 우회).
+   기본은 공개 프록시, 시세 설정에서 Cloudflare Worker 주소를 넣으면 우선 사용. */
+var PUBLIC_PROXIES=["https://api.allorigins.win/raw?url=","https://api.codetabs.com/v1/proxy/?quest="];
+var WORKER_CODE='export default {\n'
+  +'  async fetch(req) {\n'
+  +'    const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,OPTIONS" };\n'
+  +'    if (req.method === "OPTIONS") return new Response(null, { headers: cors });\n'
+  +'    const t = new URL(req.url).searchParams.get("url");\n'
+  +'    if (!t) return new Response("missing url", { status: 400, headers: cors });\n'
+  +'    const r = await fetch(t, { headers: { "User-Agent": "Mozilla/5.0" } });\n'
+  +'    return new Response(r.body, { status: r.status, headers: { ...cors, "Content-Type": "application/json" } });\n'
+  +'  }\n'
+  +'};';
+function proxyBases(){
+  if(state&&state.proxyUrl){
+    var u=state.proxyUrl.trim();
+    if(u){
+      if(!/[?&](url|quest)=$/.test(u)) u+=(u.indexOf("?")>=0?"&":"?")+"url=";
+      return [u].concat(PUBLIC_PROXIES);
+    }
+  }
+  return PUBLIC_PROXIES;
+}
+function proxyFetchJson(targetUrl){
+  var bases=proxyBases(),i=0;
+  function step(){
+    if(i>=bases.length) return Promise.reject(new Error("proxy failed"));
+    var base=bases[i++];
+    return fetch(base+encodeURIComponent(targetUrl)).then(function(r){
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      return r.text();
+    }).then(function(txt){return JSON.parse(txt);}).catch(function(){return step();});
+  }
+  return step();
+}
+/* 종목코드 -> Yahoo 심볼 후보. 순수 숫자(한국 종목)면 .KS / .KQ 자동 부착 */
+function yahooSymbols(code){
+  code=(code||"").trim();
+  if(/^\d{4,6}$/.test(code)) return [code+".KS",code+".KQ"];
+  return [code];
+}
+function fetchYahooPrice(symbol){
+  var url="https://query1.finance.yahoo.com/v8/finance/chart/"+encodeURIComponent(symbol)
+    +"?interval=1d&range=1d&t="+Date.now();
+  return proxyFetchJson(url).then(function(d){
+    var r=d&&d.chart&&d.chart.result&&d.chart.result[0];
+    if(!r||!r.meta||r.meta.regularMarketPrice==null) throw new Error("no price");
+    return r.meta.regularMarketPrice;
+  });
+}
+function fetchCodePrice(code){
+  var cands=yahooSymbols(code),i=0;
+  function step(){
+    if(i>=cands.length) return Promise.reject(new Error("not found"));
+    return fetchYahooPrice(cands[i++]).catch(function(){return step();});
+  }
+  return step();
+}
+/* 모든 계좌의 고유 종목코드 시세를 한 번에 갱신 */
+function refreshPrices(silent){
+  if(ui.fetching) return;
+  var codes={};
+  state.accounts.forEach(function(a){
+    a.holdings.forEach(function(h){if(h.code&&String(h.code).trim())codes[h.code]=1;});
+  });
+  var list=Object.keys(codes);
+  if(!list.length){ if(!silent)alert("보유 종목이 없습니다."); return; }
+  ui.fetching=true; render();
+  var ok=0;
+  Promise.all(list.map(function(code){
+    return fetchCodePrice(code).then(function(p){
+      if(p>0){state.prices[code]=p;ok++;}
+    }).catch(function(){});
+  })).then(function(){
+    ui.fetching=false;
+    if(ok>0){state.lastFetch=Date.now();save();}
+    render();
+    if(!silent){
+      if(ok===0) alert("시세를 가져오지 못했습니다. 잠시 후 다시 시도하거나, 시세 설정에서 Cloudflare Worker 주소를 넣어보세요.");
+      else if(ok<list.length) alert("일부 종목 시세를 가져오지 못했습니다 ("+ok+"/"+list.length+"). 종목코드를 확인하거나 직접 입력하세요.");
+    }
+  });
+}
+function fmtTime(ts){
+  if(!ts) return "없음";
+  var d=new Date(ts),p=function(n){return n<10?"0"+n:""+n;};
+  return (d.getMonth()+1)+"/"+d.getDate()+" "+p(d.getHours())+":"+p(d.getMinutes());
+}
+function proxyPanel(){
+  return '<div class="card" style="margin-top:8px">'
+    +'<div class="lbl">Cloudflare Worker 프록시 주소 (선택)</div>'
+    +'<input class="input t" data-edit="proxyurl" value="'+esc(state.proxyUrl||"")+'" placeholder="https://이름.workers.dev" style="width:100%;max-width:360px">'
+    +'<p class="note" style="margin-top:8px;line-height:1.7">비워두면 공개 프록시를 사용합니다(가끔 느리거나 멈춤). 안정적으로 쓰려면 무료 Cloudflare Worker를 만들어 그 주소를 넣으세요. 자산관리 앱용 Worker가 이미 있다면 같은 주소를 그대로 넣으면 됩니다.</p>'
+    +'<div class="codebox-wrap"><button class="linkbtn" data-act="copy-worker" style="float:right">코드 복사</button>'
+    +'<div class="lbl" style="margin-bottom:6px">Worker 코드 (Cloudflare 에 붙여넣고 Deploy)</div>'
+    +'<pre class="codebox">'+esc(WORKER_CODE)+'</pre></div></div>';
+}
+
 /* ===================== 상태 ===================== */
 var STORE="rebalancer:v3";
 var state=null;
-var ui={accId:null,tab:"port",addMoney:0,openYears:{}};
+var ui={accId:null,tab:"port",addMoney:0,openYears:{},fetching:false,showProxy:false};
 var saveTimer=null;
 function load(){try{var r=localStorage.getItem(STORE);if(r)return JSON.parse(r);}catch(e){}return null;}
 function save(){clearTimeout(saveTimer);saveTimer=setTimeout(function(){
@@ -334,8 +437,7 @@ function viewPort(acc){
     rows+='<tr>'
       +'<td style="text-align:left">'
       +'<input class="input t" data-edit="h-name" data-id="'+h.id+'" value="'+esc(h.name)+'" placeholder="상품명" style="width:150px">'
-      +'<div style="margin-top:4px"><input class="input" data-edit="h-code" data-id="'+h.id+'" value="'+esc(h.code)+'" placeholder="종목코드" style="width:150px"></div>'
-      +'<div style="margin-top:4px"><input class="input t" data-edit="h-memo" data-id="'+h.id+'" value="'+esc(h.memo||"")+'" placeholder="메모 (선택)" style="width:150px;font-size:11px"></div></td>'
+      +'<div style="margin-top:4px"><input class="input" data-edit="h-code" data-id="'+h.id+'" value="'+esc(h.code)+'" placeholder="종목코드" style="width:150px"></div></td>'
       +'<td><input class="input" data-edit="h-avg" data-id="'+h.id+'" inputmode="decimal" value="'+won(h.avg)+'" style="width:80px;text-align:right"></td>'
       +'<td><input class="input" data-edit="h-qty" data-id="'+h.id+'" inputmode="decimal" value="'+won(h.qty)+'" style="width:72px;text-align:right"></td>'
       +'<td class="num dim" id="c_'+h.id+'_cost">'+won(r.cost)+'</td>'
@@ -359,7 +461,7 @@ function viewPort(acc){
     +'<span style="font-size:13px;color:'+C.txt2+';flex:1">예수금 (현금)</span>'
     +'<input class="input" data-edit="cash" inputmode="decimal" value="'+won(acc.cash)+'" style="width:110px;text-align:right">'
     +'<span style="color:'+C.txt3+';font-size:12px">원</span></div></div></div>'
-    +bar("보유 종목",'<button class="ghost" data-act="add-h">+ 종목 추가</button>')
+    +bar("보유 종목",'<button class="ghost" data-act="refresh-prices"'+(ui.fetching?" disabled":"")+'>'+(ui.fetching?"시세 갱신 중…":"↻ 시세 갱신")+'</button> <button class="ghost" data-act="add-h">+ 종목</button>')
     +'<div class="tablewrap"><table><thead><tr>'
     +'<th style="text-align:left;min-width:150px">종목</th><th>매입단가</th><th>보유수량</th>'
     +'<th>매입금액</th><th>현재가</th><th>평가금액</th><th>수익률</th><th>비중</th><th></th>'
@@ -370,7 +472,8 @@ function viewPort(acc){
     +'<td class="num" id="c_t_ret" style="color:'+(tret>=0?C.mint:C.coral)+'">'+pct(tret)+'</td>'
     +'<td class="num">100%</td><td></td></tr>'
     +'</tbody></table></div>'
-    +'<p class="note" style="margin-top:8px">같은 종목코드는 모든 계좌에서 현재가가 공유됩니다. 매월 시세만 갱신하면 됩니다.</p>'
+    +'<div class="note" style="margin-top:8px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px"><span>마지막 시세 갱신: '+fmtTime(state.lastFetch)+' \u00b7 Yahoo Finance</span><button class="linkbtn" data-act="toggle-proxy">\u2699 시세 설정</button></div>'
+    +(ui.showProxy?proxyPanel():"")
     +'</div>';
 }
 function softPort(acc){
@@ -592,6 +695,11 @@ el("app").addEventListener("click",function(e){
   else if(act==="equalize"){var n=acc.holdings.length||1;var w=Math.round(1000/n)/10;
     patch(function(){acc.holdings.forEach(function(h){h.weight=w;});});render();}
   else if(act==="apply-rebal"){applyRebalance(acc);}
+  else if(act==="refresh-prices"){refreshPrices(false);}
+  else if(act==="toggle-proxy"){ui.showProxy=!ui.showProxy;render();}
+  else if(act==="copy-worker"){
+    try{navigator.clipboard.writeText(WORKER_CODE);alert("Worker 코드를 복사했습니다.");}
+    catch(e){alert("복사 실패 — 코드를 길게 눌러 직접 복사하세요.");}}
   else if(act==="add-acc"){
     var name=prompt("새 계좌 이름","새 계좌");if(!name)return;
     var na={id:uid(),name:name,cash:0,holdings:[],contributions:[]};
@@ -628,6 +736,7 @@ el("app").addEventListener("input",function(e){
   if(f==="price"){
     var code=t.getAttribute("data-code");
     if(code){state.prices[code]=num(t.value);save();softRefresh();}return;}
+  if(f==="proxyurl"){state.proxyUrl=t.value.trim();save();return;}
   if(f==="contrib"&&acc){
     var ym=t.getAttribute("data-ym"),cv=num(t.value),ent=null;
     for(var ci=0;ci<acc.contributions.length;ci++){
@@ -641,7 +750,6 @@ el("app").addEventListener("input",function(e){
   if(!h)return;
   if(f==="h-name")h.name=t.value;
   else if(f==="h-code")h.code=t.value;
-  else if(f==="h-memo")h.memo=t.value;
   else if(f==="h-avg")h.avg=num(t.value);
   else if(f==="h-qty")h.qty=num(t.value);
   else if(f==="weight")h.weight=num(t.value);
@@ -667,6 +775,10 @@ el("importer").addEventListener("change",function(e){
 /* ===================== 시작 ===================== */
 state=consolidate(load()||seed());
 render();
+/* 앱 열 때 시세 자동 갱신 (최근 10분 내 갱신했으면 생략) */
+if(!state.lastFetch||(Date.now()-state.lastFetch>600000)){
+  setTimeout(function(){refreshPrices(true);},400);
+}
 
 /* PWA: 서비스워커 등록 */
 if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});});}
