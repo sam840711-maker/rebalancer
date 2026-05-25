@@ -278,8 +278,7 @@ function calcAccount(acc,prices){
   var first=sorted[0]?sorted[0].date:null;
   var months=first?monthsBetween(first):0;
   var days=first?daysBetween(first):1;
-  var cagr=(first&&contributed>0&&totalAsset>0&&days>=30)?xirr(sorted,totalAsset):
-    (first&&contributed>0&&totalAsset>0?totalRet:0);
+  var cagr=(first&&contributed>0&&totalAsset>0&&days>=30)?xirr(sorted,totalAsset):null;
   return {rows:rows,stockValue:stockValue,stockCost:stockCost,totalAsset:totalAsset,
     contributed:contributed,pnl:pnl,totalRet:totalRet,months:months,cagr:cagr,first:first,sorted:sorted};
 }
@@ -314,7 +313,8 @@ function xirr(conts,totalAsset){
     return s;
   }
   var lo=-0.9999,hi=20;
-  if(npv(lo)<=0||npv(hi)>=0)return 0;
+  if(npv(hi)>=0)return hi;
+  if(npv(lo)<=0)return lo;
   for(var k=0;k<200;k++){
     var mid=(lo+hi)/2;
     if(npv(mid)>0)lo=mid;else hi=mid;
@@ -532,7 +532,7 @@ function portStatStrip(stat){
     return '<div class="stat"><div class="sl">'+esc(l)+'</div>'
       +'<div class="sv" style="color:'+col+'">'+esc(v)+'</div></div>';}
   return cell("총 수익률",pct(stat.totalRet),stat.totalRet>=0?"pos":"neg")
-    +cell("연 환산",pct0(stat.cagr),"gold")
+    +cell("연 환산",stat.cagr==null?"산정 전":pct0(stat.cagr),"gold")
     +cell("총 납입금","₩"+won(stat.contributed))
     +cell("투자 기간",stat.months+"개월");
 }
