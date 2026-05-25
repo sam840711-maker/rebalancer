@@ -307,7 +307,7 @@ function calcRebalance(acc,prices,stat,addMoney){
   var rows=acc.holdings.map(function(h){
     var price=prices[h.code]||0;
     var targetAmt=base*((h.weight||0)/100);
-    var targetQty=price>0?Math.round(targetAmt/price):0;
+    var targetQty=price>0?Math.floor(targetAmt/price):0;  // 내림: 추가 투입 없이 잔여현금 항상 ≥0
     var adjQty=targetQty-h.qty;                 // +면 매수, -면 매도
     return {h:h,price:price,targetAmt:targetAmt,targetQty:targetQty,adjQty:adjQty,tradeAmt:adjQty*price};});
   var invested=rows.reduce(function(s,r){return s+r.targetQty*r.price;},0);
