@@ -775,6 +775,24 @@ function foot(){
 }
 
 /* ===================== 메인 렌더 ===================== */
+/* ===================== 뒤로 가기(브라우저 히스토리) 연동 ===================== */
+/* 화면 = {계좌, 서브탭}. 화면이 바뀔 때마다 history 항목을 쌓고,
+   기기/브라우저 '뒤로 가기'는 그 직전 화면으로 되돌린다.
+   첫 화면에서 뒤로 가기를 누르면 우리 항목이 아니므로 앱이 정상 종료된다. */
+var _navLast=null,_navPop=false;
+function syncNav(){
+  var scr=ui.accId+"|"+ui.tab;
+  if(_navLast!==null&&_navLast!==scr&&!_navPop){
+    try{history.pushState({accId:ui.accId,tab:ui.tab},"");}catch(e){}
+  }
+  _navLast=scr;
+}
+window.addEventListener("popstate",function(e){
+  var s=e.state;
+  if(!s||typeof s!=="object")return;
+  ui.accId=s.accId;ui.tab=s.tab||"port";ui.addMoney=0;ui.showProxy=false;
+  _navPop=true;render();_navPop=false;
+});
 function render(){
   buildPills();
   var app=el("app"),html="";
@@ -793,6 +811,7 @@ function render(){
     if(ui.tab==="contrib")html+=foot();
   }
   app.innerHTML=html;
+  syncNav();
 }
 function softRefresh(){
   var acc=activeAcc();if(!acc)return;
@@ -926,6 +945,7 @@ el("importer").addEventListener("change",function(e){
 /* ===================== 시작 ===================== */
 state=consolidate(load()||seed());
 render();
+try{history.replaceState({accId:ui.accId,tab:ui.tab},"");}catch(e){}
 /* 앱 열 때 시세 자동 갱신 (최근 10분 내 갱신했으면 생략) */
 if(!state.lastFetch||(Date.now()-state.lastFetch>600000)){
   setTimeout(function(){refreshPrices(true);},400);
