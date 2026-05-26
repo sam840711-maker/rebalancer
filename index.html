@@ -271,6 +271,20 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
   font-size:13.5px;color:var(--txt2);padding:7px 2px;}
 .msum b{color:var(--txt);font-family:'IBM Plex Mono',monospace;}
 
+/* ===== 계좌 선택 복원 ===== */
+.rwrap{max-height:46vh;overflow-y:auto;display:flex;flex-direction:column;gap:7px;}
+.rrow{display:flex;align-items:center;gap:11px;
+  background:var(--bg3);border:1px solid var(--line);border-radius:10px;
+  padding:11px 12px;cursor:pointer;}
+.rrow input{width:18px;height:18px;flex-shrink:0;accent-color:#4ade9e;cursor:pointer;}
+.rinfo{display:flex;flex-direction:column;gap:3px;min-width:0;}
+.rinfo b{font-size:13.5px;color:var(--txt);font-weight:600;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rsub{font-size:11px;color:var(--txt3);display:flex;align-items:center;gap:7px;}
+.rtag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;}
+.rtag.over{background:rgba(245,180,90,.16);color:#f5b45a;}
+.rtag.new{background:rgba(74,222,162,.16);color:#4ade9e;}
+
 /* ===== 증권계좌별 매입(lot) 입력 ===== */
 .lotwrap{margin-top:14px;}
 .lotblk{margin-top:11px;}
@@ -371,6 +385,15 @@ function promptModal(title,placeholder,defVal,onOk,numeric){
     onOk:function(val){if(val!=null&&String(val).trim())onOk(String(val).trim());}});
 }
 el("modal").addEventListener("click",function(e){
+  var allBtn=e.target.closest("[data-mall]");
+  if(allBtn){
+    var boxes=el("modal").querySelectorAll('input[type="checkbox"][data-mfield]');
+    var anyOff=false,bi;
+    for(bi=0;bi<boxes.length;bi++)if(!boxes[bi].checked){anyOff=true;break;}
+    for(bi=0;bi<boxes.length;bi++)boxes[bi].checked=anyOff;
+    allBtn.textContent=anyOff?"전체 해제":"전체 선택";
+    return;
+  }
   var b=e.target.closest("[data-m]");
   if(!b){if(e.target.id==="modal")closeModal();return;}
   var act=b.getAttribute("data-m");
@@ -379,7 +402,10 @@ el("modal").addEventListener("click",function(e){
     var inp=el("modal").querySelector("[data-minput]");
     var val=inp?inp.value:null;
     var fields={},fl=el("modal").querySelectorAll("[data-mfield]");
-    for(var fi=0;fi<fl.length;fi++)fields[fl[fi].getAttribute("data-mfield")]=fl[fi].value;
+    for(var fi=0;fi<fl.length;fi++){
+      var fe=fl[fi];
+      fields[fe.getAttribute("data-mfield")]=(fe.type==="checkbox")?fe.checked:fe.value;
+    }
     var cb=modal._onOk;
     closeModal();
     if(cb)cb(val,fields);
@@ -874,6 +900,8 @@ function viewPort(acc){
     staleWarn=' <span style="color:'+C.coral+'">⚠ 오래됨</span>';
   }
   return '<div class="fade">'
+    +(undoState?'<div style="text-align:center;margin:2px 0 10px">'
+      +'<button class="linkbtn" data-act="undo-rebal">↩ 직전 상태로 되돌리기</button></div>':"")
     +'<div class="acchead">'
       +'<input class="titleinput" data-edit="acc-name" value="'+esc(acc.name)+'" style="flex:1;min-width:0">'
       +nav
@@ -1023,7 +1051,7 @@ function viewRebal(acc){
     +'<p class="note" style="margin-top:10px">입금 내역 탭에 입력한 입금액이 자동으로 반영됩니다. '
     +'실행하면 보유수량이 목표수량으로 바뀌고, 매수분만큼 평균단가가 재계산되며, 잔여 현금이 예수금으로 반영됩니다.</p>'
     +(undoState?'<div style="text-align:center;margin-top:10px">'
-      +'<button class="linkbtn" data-act="undo-rebal">↩ 직전 리밸런싱 되돌리기</button></div>':"")
+      +'<button class="linkbtn" data-act="undo-rebal">↩ 직전 상태로 되돌리기</button></div>':"")
     +'</div>';
 }
 function softRebal(acc){
@@ -1440,10 +1468,7 @@ function addAccount(){
     try{shareBackup();}catch(e){toast("백업을 열 수 없습니다.");}
   });
   var tr=el("topRestore");
-  if(tr)tr.addEventListener("click",function(){
-    confirmModal("백업 복원","백업 파일을 불러오면 지금 데이터가 모두 백업 내용으로 바뀝니다. 계속할까요?",
-      function(){el("importer").click();},false,"파일 선택");
-  });
+  if(tr)tr.addEventListener("click",function(){el("importer").click();});
 })();
 
 /* pills 영역 클릭 */
@@ -1495,17 +1520,60 @@ el("importer").addEventListener("change",function(e){
   var file=e.target.files[0];if(!file)return;
   var rd=new FileReader();
   rd.onload=function(){
+    el("importer").value="";
     try{
       var data=JSON.parse(rd.result);
       if(!data||typeof data!=="object"||!Array.isArray(data.accounts))
         throw new Error("형식 오류");
-      state=consolidate(data);undoState=null;save();ui.accId=null;ui.tab="port";render();
-      toast("백업을 불러왔습니다.");
+      openRestoreModal(consolidate(data));
     }catch(err){toast("올바른 백업 파일이 아닙니다.");}
-    el("importer").value="";
   };
   rd.readAsText(file);
 });
+/* 백업에서 복원할 계좌를 골라 받는 모달 */
+function openRestoreModal(backup){
+  if(!backup.accounts.length){toast("백업에 계좌가 없습니다.");return;}
+  var curIds={};state.accounts.forEach(function(a){curIds[a.id]=1;});
+  var rows=backup.accounts.map(function(a){
+    var tag=curIds[a.id]?'<span class="rtag over">덮어쓰기</span>'
+                        :'<span class="rtag new">새 계좌</span>';
+    return '<label class="rrow"><input type="checkbox" data-mfield="acc:'+a.id+'" checked>'
+      +'<span class="rinfo"><b>'+esc(a.name)+'</b>'
+      +'<span class="rsub">종목 '+( (a.holdings||[]).length )+'개 '+tag+'</span></span></label>';
+  }).join("");
+  modal({title:"백업에서 복원",
+    body:'<p class="mtext" style="margin-bottom:9px">되돌릴 계좌를 선택하세요. 선택한 계좌만 '
+      +'백업 내용으로 바뀌고, 나머지 계좌는 그대로 유지됩니다.</p>'
+      +'<div style="text-align:right;margin-bottom:7px">'
+      +'<button class="linkbtn" data-mall>전체 해제</button></div>'
+      +'<div class="rwrap">'+rows+'</div>',
+    okText:"복원",cancelText:"취소",
+    onOk:function(val,fields){
+      var ids=[];
+      for(var k in fields){if(k.indexOf("acc:")===0&&fields[k])ids.push(k.slice(4));}
+      if(!ids.length){toast("선택한 계좌가 없습니다.");return;}
+      applyRestore(backup,ids);
+    }});
+}
+function applyRestore(backup,ids){
+  undoState=JSON.parse(JSON.stringify(state));
+  var pick={};ids.forEach(function(id){pick[id]=1;});
+  var idx={};state.accounts.forEach(function(a,i){idx[a.id]=i;});
+  var added=0,replaced=0;
+  backup.accounts.forEach(function(ba){
+    if(!pick[ba.id])return;
+    if(idx[ba.id]!==undefined){state.accounts[idx[ba.id]]=ba;replaced++;}
+    else{state.accounts.push(ba);added++;}
+  });
+  // 시세는 현재 값을 우선하고, 없는 종목코드만 백업에서 보강
+  if(backup.prices)for(var c in backup.prices){
+    if(state.prices[c]===undefined)state.prices[c]=backup.prices[c];
+  }
+  state=consolidate(state);
+  if(!state.accounts.some(function(a){return a.id===ui.accId;}))ui.accId=null;
+  save();render();
+  toast("복원 완료 — 교체 "+replaced+"개"+(added?", 추가 "+added+"개":""));
+}
 
 /* ===================== 시작 ===================== */
 state=consolidate(load()||seed());
