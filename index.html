@@ -1128,11 +1128,16 @@ function foot(){
       +'">아직 백업한 적 없음 · 백업을 권장합니다</span>';
   }
   return '<div class="foot">'
+    +'<button class="ghost" data-act="share-backup">백업 공유 (드라이브)</button>'
     +'<button class="ghost" data-act="export">백업 저장 (.json)</button>'
     +'<button class="ghost" data-act="import">백업 불러오기</button>'
     +'<button class="ghost" data-act="reset">초기 데이터로 재설정</button>'
     +'<div style="flex:1"></div>'
-    +bk+'</div>';
+    +bk+'</div>'
+    +'<p class="note" style="margin-top:10px;line-height:1.75">'
+    +'<b style="color:var(--txt2)">백업 공유</b>를 누른 뒤 공유 메뉴에서 <b style="color:var(--txt2)">Google 드라이브</b>를 '
+    +'선택하면 드라이브에 백업 파일이 저장됩니다. 복원할 때는 <b style="color:var(--txt2)">백업 불러오기</b>에서 '
+    +'드라이브에 있는 파일을 고르면 됩니다.</p>';
 }
 
 /* ===================== 메인 렌더 ===================== */
@@ -1162,7 +1167,8 @@ function render(){
       el("app").innerHTML='<div class="empty fade">'
         +'화면을 그리는 중 오류가 발생했습니다.<br>'
         +'<span class="note">'+esc(String(err&&err.message||err))+'</span><br>'
-        +'<button class="btn" data-act="export" style="margin-top:16px">백업 내보내기</button>'
+        +'<button class="btn" data-act="share-backup" style="margin-top:16px">백업 공유 (드라이브)</button>'
+        +'<button class="ghost" data-act="export" style="margin-top:8px">백업 저장 (.json)</button>'
         +'<button class="ghost" data-act="reset" style="margin-top:8px">초기 데이터로 재설정</button></div>';
     }catch(e2){}
   }
@@ -1261,6 +1267,23 @@ function exportData(){
   state.lastBackup=Date.now();save();
   toast("백업 파일을 저장했습니다.");
 }
+/* 공유 시트로 백업 파일 전송 → Google 드라이브 등 앱 선택 (OAuth 불필요) */
+function shareBackup(){
+  var fname="rebalancer-backup-"+todayStr()+".json";
+  var json=JSON.stringify(state,null,2);
+  try{
+    var file=new File([json],fname,{type:"application/json"});
+    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+      navigator.share({files:[file],title:"리밸런서 백업"})
+        .then(function(){state.lastBackup=Date.now();save();toast("백업을 공유했습니다.");})
+        .catch(function(){});   // 사용자가 취소
+      return;
+    }
+  }catch(e){}
+  // 공유 미지원(주로 데스크톱) → 파일 다운로드로 대체
+  exportData();
+  toast("공유를 지원하지 않아 파일로 저장했습니다. 드라이브에 올려 주세요.");
+}
 
 el("app").addEventListener("click",function(e){
   var t=e.target.closest("[data-act]");if(!t)return;
@@ -1352,6 +1375,7 @@ el("app").addEventListener("click",function(e){
     catch(e){toast("복사 실패 — 코드를 길게 눌러 직접 복사하세요.");}}
   else if(act==="add-acc"){addAccount();}
   else if(act==="export"){exportData();}
+  else if(act==="share-backup"){shareBackup();}
   else if(act==="import"){el("importer").click();}
   else if(act==="reset"){
     confirmModal("초기화","모든 데이터를 초기 상태로 되돌릴까요? 현재 데이터가 사라집니다.",function(){
