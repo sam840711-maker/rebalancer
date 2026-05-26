@@ -36,11 +36,12 @@ header{padding-top:calc(18px + env(safe-area-inset-top));}
 .brand b{color:var(--mint);}
 .tagline{font-size:11px;color:var(--txt3);font-weight:500;margin-left:8px;
   flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.backupbtn{flex-shrink:0;margin-left:auto;
+.topbtns{margin-left:auto;flex-shrink:0;display:flex;gap:6px;align-self:center;}
+.backupbtn{flex-shrink:0;
   background:var(--bg3);color:var(--mint);
   border:1px solid var(--line2);border-radius:9px;
-  padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;
-  font-family:inherit;transition:.15s;align-self:center;}
+  padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;
+  font-family:inherit;transition:.15s;white-space:nowrap;}
 .backupbtn:hover{border-color:var(--mint);}
 .backupbtn:active{transform:scale(.96);}
 .pills{display:flex;gap:7px;margin-top:15px;overflow-x:auto;padding-bottom:3px;scrollbar-width:none;}
@@ -303,7 +304,10 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
   <div class="row" style="align-items:baseline">
     <span class="brand">리밸런<b>서</b></span>
     <span class="tagline">적립식 리밸런싱 포트폴리오 관리</span>
-    <button class="backupbtn" id="topBackup" title="백업 공유">⤒ 백업</button>
+    <span class="topbtns">
+      <button class="backupbtn" id="topBackup" title="백업 저장">⤒ 백업</button>
+      <button class="backupbtn" id="topRestore" title="백업 복원">⤓ 복원</button>
+    </span>
   </div>
   <div class="pills" id="pills"></div>
 </header></div>
@@ -1137,16 +1141,12 @@ function foot(){
       +'">아직 백업한 적 없음 · 백업을 권장합니다</span>';
   }
   return '<div class="foot">'
-    +'<button class="ghost" data-act="share-backup">백업 공유 (드라이브)</button>'
-    +'<button class="ghost" data-act="export">백업 저장 (.json)</button>'
-    +'<button class="ghost" data-act="import">백업 불러오기</button>'
     +'<button class="ghost" data-act="reset">초기 데이터로 재설정</button>'
     +'<div style="flex:1"></div>'
     +bk+'</div>'
     +'<p class="note" style="margin-top:10px;line-height:1.75">'
-    +'<b style="color:var(--txt2)">백업 공유</b>를 누른 뒤 공유 메뉴에서 <b style="color:var(--txt2)">Google 드라이브</b>를 '
-    +'선택하면 드라이브에 백업 파일이 저장됩니다. 복원할 때는 <b style="color:var(--txt2)">백업 불러오기</b>에서 '
-    +'드라이브에 있는 파일을 고르면 됩니다.</p>';
+    +'백업 저장과 복원은 화면 맨 위 <b style="color:var(--mint)">⤒ 백업</b> · '
+    +'<b style="color:var(--mint)">⤓ 복원</b> 버튼을 사용하세요.</p>';
 }
 
 /* ===================== 메인 렌더 ===================== */
@@ -1438,6 +1438,11 @@ function addAccount(){
   var tb=el("topBackup");
   if(tb)tb.addEventListener("click",function(){
     try{shareBackup();}catch(e){toast("백업을 열 수 없습니다.");}
+  });
+  var tr=el("topRestore");
+  if(tr)tr.addEventListener("click",function(){
+    confirmModal("백업 복원","백업 파일을 불러오면 지금 데이터가 모두 백업 내용으로 바뀝니다. 계속할까요?",
+      function(){el("importer").click();},false,"파일 선택");
   });
 })();
 
