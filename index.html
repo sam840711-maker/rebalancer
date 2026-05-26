@@ -228,6 +228,11 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
   font-weight:600;font-size:14px;}
 .arrow{color:var(--txt3);margin:0 5px;}
 .rbtrade{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.rbprice{text-align:right;font-size:11.5px;color:var(--txt3);
+  margin-top:6px;min-height:1px;}
+.rbprice b{font-family:'IBM Plex Mono',monospace;color:var(--txt);font-weight:600;}
+.rbprice .rblbl{font-weight:600;}
+.rbprice .rbx{color:var(--txt3);}
 .rbresult{display:flex;align-items:center;justify-content:space-between;
   gap:12px;background:var(--bg2);border:1px solid var(--line2);
   border-radius:14px;padding:15px;margin-top:14px;}
@@ -933,6 +938,12 @@ function adjCellHTML(adj){
   if(adj===0)return '<span style="color:'+C.txt3+'">—</span>';
   return '<span class="badge '+(adj>0?"buy":"sell")+'">'+(adj>0?"매수":"매도")+' '+Math.abs(adj)+'</span>';
 }
+function rbPriceHTML(r){
+  if(r.adjQty===0||r.price<=0)return "";
+  var buy=r.adjQty>0;
+  return '<span class="rblbl" style="color:'+(buy?C.coral:C.mint)+'">'+(buy?"매수":"매도")+' 단가</span> '
+    +'<b>₩'+won(r.price)+'</b> <span class="rbx">× '+won(Math.abs(r.adjQty))+'주</span>';
+}
 function rebalHeroHTML(acc,stat,rb,pend){
   var off=Math.abs(rb.wsum-100)>0.5;
   return '<div class="hero">'
@@ -973,7 +984,8 @@ function rebalCardHTML(r,i){
       +'<span class="mono" id="r_'+h.id+'_trd" style="color:'
       +(r.adjQty>0?C.coral:r.adjQty<0?C.mint:C.txt3)+'">'
       +(r.adjQty===0?"—":(r.tradeAmt>0?"−":"+")+won(Math.abs(r.tradeAmt)))+'</span></span>'
-    +'</div></div>';
+    +'</div>'
+    +'<div class="rbprice" id="r_'+h.id+'_up">'+rbPriceHTML(r)+'</div></div>';
 }
 function viewRebal(acc){
   var stat=calcAccount(acc,state.prices);
@@ -1019,6 +1031,7 @@ function softRebal(acc){
     if(el("r_"+r.h.id+"_adj"))el("r_"+r.h.id+"_adj").innerHTML=adjCellHTML(r.adjQty);
     setT("r_"+r.h.id+"_trd",r.adjQty===0?"—":(r.tradeAmt>0?"−":"+")+won(Math.abs(r.tradeAmt)),
       r.adjQty>0?C.coral:r.adjQty<0?C.mint:C.txt3);
+    if(el("r_"+r.h.id+"_up"))el("r_"+r.h.id+"_up").innerHTML=rbPriceHTML(r);
   });
   if(el("r_apply"))el("r_apply").disabled=off;
 }
