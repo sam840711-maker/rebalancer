@@ -34,7 +34,15 @@ body{
 header{padding-top:calc(18px + env(safe-area-inset-top));}
 .brand{font-size:19px;font-weight:800;letter-spacing:-.02em;}
 .brand b{color:var(--mint);}
-.tagline{font-size:11px;color:var(--txt3);font-weight:500;margin-left:8px;}
+.tagline{font-size:11px;color:var(--txt3);font-weight:500;margin-left:8px;
+  flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.backupbtn{flex-shrink:0;margin-left:auto;
+  background:var(--bg3);color:var(--mint);
+  border:1px solid var(--line2);border-radius:9px;
+  padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;
+  font-family:inherit;transition:.15s;align-self:center;}
+.backupbtn:hover{border-color:var(--mint);}
+.backupbtn:active{transform:scale(.96);}
 .pills{display:flex;gap:7px;margin-top:15px;overflow-x:auto;padding-bottom:3px;scrollbar-width:none;}
 .pills::-webkit-scrollbar{display:none;}
 .pill{background:var(--bg2);border:1px solid var(--line);color:var(--txt2);
@@ -295,6 +303,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
   <div class="row" style="align-items:baseline">
     <span class="brand">리밸런<b>서</b></span>
     <span class="tagline">적립식 리밸런싱 포트폴리오 관리</span>
+    <button class="backupbtn" id="topBackup" title="백업 공유">⤒ 백업</button>
   </div>
   <div class="pills" id="pills"></div>
 </header></div>
@@ -1391,6 +1400,9 @@ function addAccount(){
     ui.accId=na.id;ui.tab="port";render();toast("계좌를 추가했습니다.");
   });
 }
+
+/* 상단 백업 버튼 */
+el("topBackup").addEventListener("click",function(){shareBackup();});
 
 /* pills 영역 클릭 */
 el("pills").addEventListener("click",function(e){
