@@ -493,24 +493,11 @@ function latestYM(acc){
   return (acc.contributions||[]).reduce(function(m,c){
     var k=c.date.slice(0,7);return k>m?k:m;},"");
 }
-/* 납입 내역에서 아직 리밸런싱으로 반영되지 않은 납입금(= 이번에 배분할 금액).
-   deployedYM(마지막으로 반영 완료한 월) 이후 월의 납입액만 집계한다. */
-function pendingContrib(acc){
-  var dep=acc.deployedYM||"";
-  var items=(acc.contributions||[]).filter(function(c){return c.date.slice(0,7)>dep;});
-  var amount=items.reduce(function(s,c){return s+c.amount;},0);
-  var byBroker={};
-  items.forEach(function(c){byBroker[c.b]=(byBroker[c.b]||0)+c.amount;});
-  var label="";
-  if(items.length===1)label=items[0].date.slice(0,7);
-  else if(items.length>1)label=items[0].date.slice(0,7)+" 외 "+(items.length-1)+"건";
-  return {amount:amount,count:items.length,label:label,byBroker:byBroker};
-}
-/* 리밸런싱: 예수금 + 이번 추가 납입액까지 반영한 목표 평가자산(base)을 기준으로
-   각 종목의 목표수량을 구하고, 현재 보유수량과의 차이만큼 매수/매도 수량을 산출한다.
-   1차: 내림으로 초과 매수 방지 → 2차: 남은 현금으로 가장 부족한 종목부터 1주씩 추가. */
-function calcRebalance(acc,prices,stat,addMoney){
-  var base=stat.stockValue+accCash(acc)+(addMoney||0);
+/* 리밸런싱: 현재 평가액 + 예수금을 기준(base)으로 각 종목의 목표수량을 구하고,
+   현재 보유수량과의 차이만큼 매수/매도 수량을 산출한다(계획 표시 전용).
+   1차: 내림으로 초과 매수 방지 → 2차: 남은 예수금으로 가장 부족한 종목부터 1주씩 추가. */
+function calcRebalance(acc,prices,stat){
+  var base=stat.stockValue+accCash(acc);
   var wsum=acc.holdings.reduce(function(s,h){return s+(h.weight||0);},0);
   var rows=acc.holdings.map(function(h){
     var price=prices[h.code]||0;
@@ -985,19 +972,16 @@ function rbPriceHTML(r){
   return '<span class="rblbl" style="color:'+(buy?C.coral:C.mint)+'">'+(buy?"매수":"매도")+' 단가</span> '
     +'<b>₩'+won(r.price)+'</b> <span class="rbx">× '+won(Math.abs(r.adjQty))+'주</span>';
 }
-function rebalHeroHTML(acc,stat,rb,pend){
+function rebalHeroHTML(acc,stat,rb){
   var off=Math.abs(rb.wsum-100)>0.5;
   return '<div class="hero">'
     +'<div class="hl">리밸런싱 대상 금액</div>'
     +'<div class="hbig" id="r_base">₩'+won(rb.base)+'</div>'
     +'<div class="note" id="r_baseinfo" style="margin-top:6px">평가액 '+won(stat.stockValue)
-      +' + 현금 '+won(accCash(acc))+(pend.amount>0?' + 납입 '+won(pend.amount):'')+'</div>'
+      +' + 예수금 '+won(accCash(acc))+'</div>'
+    +'<div style="margin-top:8px">'
+      +'<button class="linkbtn" data-act="quick-contrib">＋ 입금 기록 (예수금에 반영)</button></div>'
     +'<div class="herodiv"></div>'
-    +'<div class="rbctrl">'
-      +'<div class="field" style="flex:1;min-width:0"><div class="fl">입금 내역 반영 금액</div>'
-        +'<div class="mono" id="r_pend" style="font-size:16px;color:'+(pend.amount>0?C.mint:C.txt3)+'">₩'+won(pend.amount)
-        +(pend.label?' <span style="font-size:11px;color:'+C.txt3+'">('+esc(pend.label)+')</span>':'')+'</div></div>'
-      +'<button class="ghost sm" data-act="quick-contrib">＋ 이번 달 납입</button></div>'
     +'<div class="wsumrow"><span>목표 비중 합계</span>'
       +'<span style="display:flex;align-items:center;gap:8px">'
       +'<span class="mono" id="r_wsum" style="color:'+(off?C.coral:C.mint)+'">'
@@ -1030,38 +1014,34 @@ function rebalCardHTML(r,i){
 }
 function viewRebal(acc){
   var stat=calcAccount(acc,state.prices);
-  var pend=pendingContrib(acc);
-  var rb=calcRebalance(acc,state.prices,stat,pend.amount);
-  var off=Math.abs(rb.wsum-100)>0.5;
+  var rb=calcRebalance(acc,state.prices,stat);
   var cards="";
   rb.rows.forEach(function(r,i){cards+=rebalCardHTML(r,i);});
   if(!cards)cards='<div class="note" style="text-align:center;padding:26px 14px">'
     +'보유 종목이 없습니다. 포트폴리오 탭에서 종목을 추가하세요.</div>';
   return '<div class="fade">'
     +bar("리밸런싱 계산기")
-    +rebalHeroHTML(acc,stat,rb,pend)
-    +bar("종목별 목표 배분")
+    +rebalHeroHTML(acc,stat,rb)
+    +bar("종목별 매매 계획")
     +cards
     +'<div class="rbresult">'
-      +'<div><div class="fl" style="margin:0">리밸런싱 후 잔여 현금</div>'
+      +'<div><div class="fl" style="margin:0">매매 후 예상 잔여 예수금</div>'
       +'<div class="mono" id="r_left" style="font-size:17px;margin-top:3px;color:'
       +(rb.leftover<0?C.coral:C.txt)+'">₩'+won(rb.leftover)+'</div></div>'
-      +'<button class="btn" id="r_apply" data-act="apply-rebal"'+(off?" disabled":"")+'>리밸런싱 실행 →</button>'
     +'</div>'
-    +'<p class="note" style="margin-top:10px">입금 내역 탭에 입력한 입금액이 자동으로 반영됩니다. '
-    +'실행하면 보유수량이 목표수량으로 바뀌고, 매수분만큼 평균단가가 재계산되며, 잔여 현금이 예수금으로 반영됩니다.</p>'
-    +(undoState?'<div style="text-align:center;margin-top:10px">'
-      +'<button class="linkbtn" data-act="undo-rebal">↩ 직전 상태로 되돌리기</button></div>':"")
+    +'<p class="note" style="margin-top:10px;line-height:1.75">'
+    +'위 계획은 예수금을 최대한 사용하도록 계산한 <b style="color:var(--txt2)">참고용</b>입니다. '
+    +'증권사에서 직접 매수·매도한 뒤, <b style="color:var(--mint)">포트폴리오 탭</b>에서 각 종목의 '
+    +'보유수량·매입금액과 예수금을 <b style="color:var(--txt2)">실제 체결 결과</b>로 수정해 저장하세요.</p>'
     +'</div>';
 }
 function softRebal(acc){
   var stat=calcAccount(acc,state.prices);
-  var pend=pendingContrib(acc);
-  var rb=calcRebalance(acc,state.prices,stat,pend.amount);
+  var rb=calcRebalance(acc,state.prices,stat);
   var off=Math.abs(rb.wsum-100)>0.5;
   setT("r_base","₩"+won(rb.base));
   if(el("r_baseinfo"))el("r_baseinfo").textContent="평가액 "+won(stat.stockValue)
-    +" + 현금 "+won(accCash(acc))+(pend.amount>0?" + 납입 "+won(pend.amount):"");
+    +" + 예수금 "+won(accCash(acc));
   setT("r_wsum",rb.wsum.toFixed(1)+"%"+(off?" ⚠":" ✓"),off?C.coral:C.mint);
   setT("r_left","₩"+won(rb.leftover),rb.leftover<0?C.coral:C.txt);
   rb.rows.forEach(function(r){
@@ -1101,7 +1081,10 @@ function viewContrib(acc){
   var minY=w.length?parseInt(w[0].date.slice(0,4),10):nowY;
   var maxY=Math.max(nowY,w.length?parseInt(w[w.length-1].date.slice(0,4),10):nowY);
   var html='<div class="fade">'+bar("입금 내역")
-    +'<div class="metrics" id="m_contrib">'+contribMetricsHTML(stat)+'</div>';
+    +'<div class="metrics" id="m_contrib">'+contribMetricsHTML(stat)+'</div>'
+    +'<p class="note" style="margin:2px 2px 4px;line-height:1.7">'
+    +'입금액을 입력하면 해당 증권계좌의 <b style="color:var(--mint)">예수금</b>에 자동으로 더해집니다. '
+    +'매수 후에는 포트폴리오 탭에서 예수금을 실제 잔액으로 수정하세요.</p>';
   for(var y=maxY;y>=minY;y--){
     var yTotal=0;
     for(var m=1;m<=12;m++){var ym=y+"-"+(m<10?"0"+m:m);yTotal+=ymMap[ym]||0;}
@@ -1238,57 +1221,7 @@ function softRefresh(){
 
 /* ===================== 이벤트 ===================== */
 function patch(fn){fn();save();}
-var undoState=null;   // 직전 리밸런싱 되돌리기용 스냅샷
-function applyRebalance(acc){
-  var stat=calcAccount(acc,state.prices);
-  var pend=pendingContrib(acc);
-  var rb=calcRebalance(acc,state.prices,stat,pend.amount);
-  if(Math.abs(rb.wsum-100)>0.5){toast("목표 비중 합계가 100%가 아닙니다.");return;}
-  var moves=rb.rows.filter(function(r){return r.adjQty!==0;});
-  if(!moves.length){toast("이미 목표 비중에 맞춰져 있습니다.");return;}
-  var rowsHtml=rb.rows.map(function(r){
-    var act=r.adjQty>0?'<span style="color:'+C.coral+'">매수 '+r.adjQty+'주</span>'
-      :r.adjQty<0?'<span style="color:'+C.mint+'">매도 '+(-r.adjQty)+'주</span>'
-      :'<span style="color:'+C.txt3+'">변동 없음</span>';
-    return '<div class="msum"><span>'+esc(r.h.name||r.h.code||"—")+'</span>'+act+'</div>';
-  }).join("");
-  var body='<div class="msumwrap">'+rowsHtml+'</div>'
-    +'<div class="msum" style="border-top:1px solid var(--line);margin-top:4px;padding-top:9px">'
-    +'<span>리밸런싱 후 잔여 현금</span><b>₩'+won(rb.leftover)+'</b></div>'
-    +((acc.brokers&&acc.brokers.length>1)
-      ?'<p class="mtext" style="margin-top:8px">매수·매도 수량은 증권계좌별 보유 비율에 따라 자동 분배됩니다.</p>':"")
-    +(pend.amount>0?'<p class="mtext" style="margin-top:8px">입금 내역의 ₩'+won(pend.amount)
-      +' 이 반영되며, 실행 후 되돌릴 수 있습니다.</p>'
-      :'<p class="mtext" style="margin-top:8px">실행 후 되돌릴 수 있습니다.</p>');
-  modal({title:"리밸런싱 실행",body:body,okText:"실행",onOk:function(){
-    undoState=JSON.parse(JSON.stringify(state));
-    var brokerSpend={};   // 증권계좌별 순매매대금(+매수)
-    rb.rows.forEach(function(r){
-      var h=r.h,delta=r.adjQty;
-      var w=h.lots.map(function(l){return l.qty||0;});
-      var d=distributeDelta(w,delta);
-      h.lots.forEach(function(l,li){
-        var dq=d[li]||0;
-        brokerSpend[l.b]=(brokerSpend[l.b]||0)+dq*r.price;
-        if(dq>0){
-          l.cost=(l.cost||0)+dq*r.price;                          // 매수분 매입금액 가산
-        }else if(dq<0){
-          var oq=l.qty||0;
-          l.cost=oq>0?Math.round((l.cost||0)*(oq+dq)/oq):0;       // 매도분 비례 차감
-        }
-        l.qty=(l.qty||0)+dq;
-      });
-    });
-    var pendByB=pend.byBroker||{};
-    acc.brokers.forEach(function(b){
-      // 새 예수금 = 기존 예수금 + 이번 납입 − 매수대금(+매도금 회수)
-      b.cash=Math.round((b.cash||0)+(pendByB[b.id]||0)-(brokerSpend[b.id]||0));
-    });
-    acc.deployedYM=latestYM(acc)||acc.deployedYM||"";   // 현재까지의 납입 = 모두 반영 완료
-    save();render();
-    toast("리밸런싱이 적용되었습니다.");
-  }});
-}
+var undoState=null;   // 복원 직전 상태 스냅샷 (되돌리기용)
 function undoRebalance(){
   if(!undoState)return;
   state=undoState;undoState=null;save();render();
@@ -1377,7 +1310,6 @@ el("app").addEventListener("click",function(e){
     if(sum<=0){toast("먼저 목표비중을 입력하세요.");return;}
     patch(function(){acc.holdings.forEach(function(h){
       h.weight=Math.round((h.weight||0)/sum*1000)/10;});});render();toast("비중을 100%로 맞췄습니다.");}
-  else if(act==="apply-rebal"){applyRebalance(acc);}
   else if(act==="undo-rebal"){undoRebalance();}
   else if(act==="acc-move"){
     var dir=parseInt(t.getAttribute("data-dir"),10);
@@ -1392,9 +1324,13 @@ el("app").addEventListener("click",function(e){
       for(var i=0;i<acc.contributions.length;i++){
         var c=acc.contributions[i];
         if(c.date.slice(0,7)===qym&&c.b===bid){ex=c;break;}}
+      var old=ex?ex.amount:0;
       if(ex)ex.amount=amt;
       else acc.contributions.push({id:uid(),date:qym+"-01",amount:amt,b:bid});
-      save();render();toast("입금 내역이 저장되었습니다.");
+      var bk=qbs.filter(function(b){return b.id===bid;})[0];
+      if(bk)bk.cash=(bk.cash||0)+(amt-old);            // 입금액 차액을 예수금에 반영
+      save();render();
+      toast("입금 ₩"+won(amt-old>0?amt-old:amt)+" — 예수금에 반영되었습니다.");
     };
     if(qbs.length<=1){
       var cur=(acc.contributions||[]).filter(function(c){return c.date.slice(0,7)===qym;})[0];
@@ -1497,11 +1433,14 @@ el("app").addEventListener("input",function(e){
     for(var ci=0;ci<acc.contributions.length;ci++){
       var cc=acc.contributions[ci];
       if(cc.date.slice(0,7)===ym&&cc.b===cbid){ent=cc;break;}}
+    var oldAmt=ent?ent.amount:0;
     if(ent)ent.amount=cv;
     else if(cv>0)acc.contributions.push({id:uid(),date:ym+"-01",amount:cv,b:cbid});
+    var cbk=(acc.brokers||[]).filter(function(b){return b.id===cbid;})[0];
+    if(cbk)cbk.cash=(cbk.cash||0)+(cv-oldAmt);          // 입금액 차액을 예수금에 반영
     save();softContrib(acc);
     clearTimeout(contribToastTimer);
-    contribToastTimer=setTimeout(function(){toast("입금 내역 저장됨");},700);
+    contribToastTimer=setTimeout(function(){toast("입금 내역 저장 — 예수금에 반영됨");},700);
     return;}
   if(!acc)return;
   var id=t.getAttribute("data-id");
