@@ -830,7 +830,6 @@ function holdingCardHTML(r,i,acc){
     +'</div>'+(ed?'<button class="x" data-act="del-h" data-id="'+h.id+'">✕</button>':"")+'</div>'
     +'<div class="hcval"><span class="v" id="pv_'+h.id+'">₩'+won(r.value)+'</span>'
       +'<span class="r" id="pr_'+h.id+'" style="color:'+(r.ret>=0?C.mint:C.coral)+'">'+pct(r.ret)+'</span></div>'
-    +'<div class="wbar"><i id="pwf_'+h.id+'" style="width:'+(r.share*100)+'%;background:'+compColor(i)+'"></i></div>'
     +'<div class="wmeta"><span>비중 <b id="pwp_'+h.id+'">'+pct0(r.share)+'</b></span>'
       +'<span>평가손익 <b id="pl_'+h.id+'" style="color:'+(pnl>=0?C.mint:C.coral)+'">'
       +(pnl>=0?"+":"−")+'₩'+won(Math.abs(pnl))+'</b></span></div>';
@@ -990,8 +989,6 @@ function softPort(acc){
     var pp=el("pp_"+r.h.id);
     if(pp)pp.innerHTML=r.price>0?"₩"+won(r.price):'<span class="sub">시세 없음</span>';
     setT("pwp_"+r.h.id,pct0(r.share));
-    var f=el("pwf_"+r.h.id);
-    if(f){f.style.width=(r.share*100)+"%";f.style.background=compColor(i);}
   });
 }
 
