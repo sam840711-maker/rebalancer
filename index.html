@@ -45,6 +45,16 @@ header{padding-top:calc(18px + env(safe-area-inset-top));}
 .backupbtn:hover{border-color:var(--mint);}
 .backupbtn:active{transform:scale(.96);}
 .backupbtn:disabled{opacity:.35;pointer-events:none;}
+.fxchip{flex-shrink:0;background:var(--bg3);border:1px solid var(--line);color:var(--txt);
+  border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;
+  font-family:'IBM Plex Mono',monospace;transition:.15s;letter-spacing:.01em;
+  display:inline-flex;align-items:center;gap:6px;line-height:1;}
+.fxchip:hover{border-color:var(--mint);}
+.fxchip:active{transform:scale(.96);}
+.fxchip:disabled{opacity:.55;pointer-events:none;}
+.fxchip.spin{animation:fxspin 1s linear infinite;color:var(--mint);}
+.fxchip .fxsym{font-size:9.5px;color:var(--txt3);font-weight:600;letter-spacing:.04em;}
+@keyframes fxspin{0%{opacity:1}50%{opacity:.45}100%{opacity:1}}
 .pills{display:flex;gap:7px;margin-top:15px;overflow-x:auto;padding-bottom:3px;scrollbar-width:none;}
 .pills::-webkit-scrollbar{display:none;}
 .pill{background:var(--bg2);border:1px solid var(--line);color:var(--txt2);
@@ -176,6 +186,11 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 .stat .sv{font-family:'IBM Plex Mono',monospace;font-size:clamp(10px,3vw,13.5px);
   font-weight:600;letter-spacing:-.02em;margin-top:5px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+@media(max-width:420px){
+  .tagline{display:none;}
+  .fxchip{padding:5px 8px;font-size:11px;}
+  .fxchip .fxsym{display:none;}
+}
 @media(max-width:359px){
   .statline{flex-wrap:wrap;}
   .stat{flex-basis:50%;}
@@ -359,6 +374,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
     <span class="brand">리밸런<b>서</b></span>
     <span class="tagline">적립식 리밸런싱 포트폴리오 관리</span>
     <span class="topbtns">
+      <button class="fxchip" id="fxChip" title="환율 갱신"><span id="fxVal">— </span><span class="fxsym">USD/KRW</span></button>
       <button class="backupbtn" id="topBackup" title="백업 저장">⤒ 백업</button>
       <button class="backupbtn" id="topRestore" title="백업 복원">⤓ 복원</button>
     </span>
@@ -1393,9 +1409,19 @@ function render(){
 }
 function renderInner(){
   buildPills();
-  var tb=el("topBackup"),tr=el("topRestore");
+  var tb=el("topBackup"),tr=el("topRestore"),fc=el("fxChip"),fv=el("fxVal");
   if(tb)tb.disabled=ui.editPort;
   if(tr)tr.disabled=ui.editPort;
+  if(fv){
+    var r=fx();
+    fv.textContent=(r>=1000?Math.round(r).toLocaleString("ko-KR"):r.toFixed(2))+" ";
+  }
+  if(fc){
+    fc.disabled=ui.editPort||!!ui.fxFetching;
+    fc.classList[ui.fxFetching?"add":"remove"]("spin");
+    var ts=state.fxUpdated?(" · "+fmtTime(state.fxUpdated)):"";
+    fc.title="환율 갱신"+ts;
+  }
   var app=el("app"),html="";
   var acc=activeAcc();
   if(!acc&&state.accounts.length){ui.accId=state.accounts[0].id;acc=state.accounts[0];}
@@ -1668,6 +1694,15 @@ function setCcyToggle(wrap,val){
   });
   var tr=el("topRestore");
   if(tr)tr.addEventListener("click",function(){el("importer").click();});
+  var fc=el("fxChip");
+  if(fc)fc.addEventListener("click",function(){
+    if(ui.fxFetching)return;
+    ui.fxFetching=true;render();
+    refreshFx(false).then(function(){
+      ui.fxFetching=false;render();
+      if(state.fxUpdated)toast("환율 갱신: ₩"+(fx()>=1000?Math.round(fx()).toLocaleString("ko-KR"):fx().toFixed(2)));
+    });
+  });
 })();
 
 /* pills 영역 클릭 */
