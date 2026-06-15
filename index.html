@@ -54,6 +54,8 @@ header{padding-top:calc(18px + env(safe-area-inset-top));}
 .fxchip:disabled{opacity:.55;pointer-events:none;}
 .fxchip.spin{animation:fxspin 1s linear infinite;color:var(--mint);}
 .fxchip .fxsym{font-size:9.5px;color:var(--txt3);font-weight:600;letter-spacing:.04em;}
+.fxchip .fxlbl{font-size:10px;color:var(--txt3);font-weight:700;letter-spacing:.04em;
+  font-family:"Pretendard Variable","Pretendard",system-ui,sans-serif;}
 @keyframes fxspin{0%{opacity:1}50%{opacity:.45}100%{opacity:1}}
 .pills{display:flex;gap:7px;margin-top:15px;overflow-x:auto;padding-bottom:3px;scrollbar-width:none;}
 .pills::-webkit-scrollbar{display:none;}
@@ -374,7 +376,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
     <span class="brand">리밸런<b>서</b></span>
     <span class="tagline">적립식 리밸런싱 포트폴리오 관리</span>
     <span class="topbtns">
-      <button class="fxchip" id="fxChip" title="환율 갱신"><span id="fxVal">— </span><span class="fxsym">USD/KRW</span></button>
+      <button class="fxchip" id="fxChip" title="환율 갱신"><span class="fxlbl">환율</span> <span id="fxVal">—</span> <span class="fxsym">USD/KRW</span></button>
       <button class="backupbtn" id="topBackup" title="백업 저장">⤒ 백업</button>
       <button class="backupbtn" id="topRestore" title="백업 복원">⤓ 복원</button>
     </span>
@@ -1414,7 +1416,7 @@ function renderInner(){
   if(tr)tr.disabled=ui.editPort;
   if(fv){
     var r=fx();
-    fv.textContent=(r>=1000?Math.round(r).toLocaleString("ko-KR"):r.toFixed(2))+" ";
+    fv.textContent=r.toLocaleString("ko-KR",{minimumFractionDigits:2,maximumFractionDigits:2});
   }
   if(fc){
     fc.disabled=ui.editPort||!!ui.fxFetching;
@@ -1712,7 +1714,8 @@ function setCcyToggle(wrap,val){
     ui.fxFetching=true;render();
     refreshFx(false).then(function(){
       ui.fxFetching=false;render();
-      if(state.fxUpdated)toast("환율 갱신: ₩"+(fx()>=1000?Math.round(fx()).toLocaleString("ko-KR"):fx().toFixed(2)));
+      if(state.fxUpdated)toast("환율 갱신 — 1 USD = ₩"
+        +fx().toLocaleString("ko-KR",{minimumFractionDigits:2,maximumFractionDigits:2}));
     });
   });
 })();
@@ -1840,6 +1843,24 @@ try{history.replaceState({accId:ui.accId,tab:ui.tab},"");}catch(e){}
 /* 앱 열 때 시세 자동 갱신 (최근 10분 내 갱신했으면 생략) */
 if(!state.lastFetch||(Date.now()-state.lastFetch>600000)){
   setTimeout(function(){refreshPrices(true);},400);
+}else{
+  /* 시세는 신선해도 환율은 별도로 — 마지막 환율 갱신이 5분 이상 지났으면 백그라운드로 끌어옴 */
+  if(!state.fxUpdated||(Date.now()-state.fxUpdated>300000)){
+    setTimeout(function(){refreshFx(true).then(function(){render();});},500);
+  }
+}
+/* 환율 주기 자동 갱신: 5분마다 (앱이 보일 때만), 백그라운드 복귀 시 즉시 */
+setInterval(function(){
+  if(typeof document!=="undefined"&&document.hidden)return;
+  refreshFx(true).then(function(){render();});
+},5*60*1000);
+if(typeof document!=="undefined"&&document.addEventListener){
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden)return;
+    if(!state.fxUpdated||(Date.now()-state.fxUpdated>60000)){
+      refreshFx(true).then(function(){render();});
+    }
+  });
 }
 
 /* PWA: 서비스워커 등록 */
