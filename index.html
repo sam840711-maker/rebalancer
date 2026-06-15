@@ -1635,6 +1635,7 @@ function addAccount(){
 }
 /* 종목 추가: 종목코드 입력 → 야후에서 통화·이름·시세 조회 → 확인 후 저장 */
 function openAddHoldingModal(acc){
+  ui.addLookup=null;
   var body='<div class="fl">종목코드 (티커)</div>'
     +'<input class="minput-f" data-mfield="code" placeholder="예: VOO, AAPL, 360750">'
     +'<div style="margin-top:8px;text-align:right">'
@@ -1649,11 +1650,19 @@ function openAddHoldingModal(acc){
   modal({title:"+ 종목 추가",body:body,okText:"추가",onOk:function(val,fields){
     var code=(fields.code||"").trim();
     if(!code){toast("종목코드를 입력하세요.");return;}
+    /* 중복 검사: 같은 코드가 이미 이 계좌에 있으면 추가 차단 */
+    var dup=acc.holdings.filter(function(h){return (h.code||"").trim().toLowerCase()===code.toLowerCase();})[0];
+    if(dup){toast("이미 같은 종목이 있습니다: "+(dup.name||dup.code));return;}
     var ccy=fields.ccy==="USD"?"USD":"KRW";
     var name=(fields.name||"").trim()||code;
     acc.holdings.push({id:uid(),code:code,name:name,ccy:ccy,weight:0,
       lots:(acc.brokers||[]).map(function(b){return {b:b.id,qty:0,cost:0};})});
     state.priceCcy[code]=ccy;
+    /* 조회한 시세가 같은 코드면 즉시 반영 — ↻ 시세 누르지 않아도 가격이 보이도록 */
+    if(ui.addLookup&&ui.addLookup.code===code&&ui.addLookup.price>0){
+      state.prices[code]=ui.addLookup.price;
+    }
+    ui.addLookup=null;
     save();render();toast("종목을 추가했습니다.");
   }});
 }
@@ -1670,9 +1679,12 @@ function modalLookup(){
     if(nameIn&&d.name)nameIn.value=d.name;
     var cc=(d.currency==="USD"||d.currency==="KRW")?d.currency:"KRW";
     setCcyToggle(ccyTog,cc);
+    /* 추가 시 곧바로 시세 채워지도록 조회 결과 캐시 */
+    ui.addLookup={code:code,price:d.price,currency:cc,name:d.name||""};
     info.innerHTML='<span style="color:var(--mint)">✓</span> '+esc(d.name||code)
       +' · '+cc+' '+(d.currency==="USD"?'$':'₩')+won(Math.round(d.price*100)/100);
   }).catch(function(){
+    ui.addLookup=null;
     info.innerHTML='<span style="color:'+C.coral+'">조회 실패</span> — 종목코드를 확인해 보세요.';
   });
 }
