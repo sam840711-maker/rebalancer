@@ -816,18 +816,23 @@ function refreshFx(silent){
     state.fxRate=rate;state.fxUpdated=Date.now();save();
     return true;
   }
-  return fetch("https://api.frankfurter.app/latest?from=USD&to=KRW")
-    .then(function(r){if(!r.ok)throw 0;return r.json();})
-    .then(function(d){if(!ok(d&&d.rates&&d.rates.KRW))throw 0;})
+  /* 1순위: 야후 KRW=X (분 단위 실시간 시세, 프록시 경유) */
+  return fetchYahooPrice("KRW=X")
+    .then(function(p){if(!ok(p))throw 0;})
     .catch(function(){
+      /* 2순위: Frankfurter (ECB 일별 환율, CORS 직통) */
+      return fetch("https://api.frankfurter.app/latest?from=USD&to=KRW")
+        .then(function(r){if(!r.ok)throw 0;return r.json();})
+        .then(function(d){if(!ok(d&&d.rates&&d.rates.KRW))throw 0;});
+    })
+    .catch(function(){
+      /* 3순위: er-api (시간 단위, CORS 직통) */
       return fetch("https://open.er-api.com/v6/latest/USD")
         .then(function(r){if(!r.ok)throw 0;return r.json();})
         .then(function(d){if(!ok(d&&d.rates&&d.rates.KRW))throw 0;});
     })
     .catch(function(){
-      return fetchYahooPrice("KRW=X").then(function(p){ok(p);}).catch(function(){
-        if(!silent)toast("환율 조회 실패 — 마지막 값을 유지합니다.");
-      });
+      if(!silent)toast("환율 조회 실패 — 마지막 값을 유지합니다.");
     });
 }
 /* 모든 계좌의 고유 종목코드 시세를 한 번에 갱신 */
