@@ -1845,6 +1845,44 @@ function applyRestore(backup,ids){
 state=consolidate(load()||seed());
 render();
 try{history.replaceState({accId:ui.accId,tab:ui.tab},"");}catch(e){}
+/* 좌우 스와이프로 계좌 전환 — 입력/버튼/링크 위 터치는 제외, 수정 모드 중엔 비활성 */
+(function(){
+  var appEl=el("app");
+  if(!appEl||!appEl.addEventListener)return;
+  var sx=0,sy=0,sT=0,tracking=false;
+  appEl.addEventListener("touchstart",function(e){
+    if(ui.editPort)return;
+    if(!e.touches||e.touches.length!==1)return;
+    var t=e.target;
+    if(t&&t.closest&&t.closest("input,textarea,select,button,a,[contenteditable],.lotwrap,.cashrow,.hcrow"))return;
+    sx=e.touches[0].clientX;sy=e.touches[0].clientY;sT=Date.now();tracking=true;
+  },{passive:true});
+  appEl.addEventListener("touchend",function(e){
+    if(!tracking)return;
+    tracking=false;
+    if(ui.editPort)return;
+    if(!e.changedTouches||!e.changedTouches[0])return;
+    var t=e.changedTouches[0];
+    var dx=t.clientX-sx,dy=t.clientY-sy,dt=Date.now()-sT;
+    if(dt>700)return;
+    if(Math.abs(dx)<60)return;
+    if(Math.abs(dx)<Math.abs(dy)*1.6)return;     // 수직 동작 비중 크면 무시
+    if(!state.accounts||state.accounts.length<2)return;
+    var idx=-1;
+    for(var i=0;i<state.accounts.length;i++)if(state.accounts[i].id===ui.accId){idx=i;break;}
+    if(idx<0)return;
+    var n=state.accounts.length;
+    var ni=dx<0?(idx+1)%n:(idx-1+n)%n;
+    ui.accId=state.accounts[ni].id;
+    render();
+    /* 활성 pill을 화면 안으로 스크롤 (긴 pill 행에서 사라지지 않도록) */
+    setTimeout(function(){
+      var pill=el("pills")&&el("pills").querySelector(".pill.on");
+      if(pill&&pill.scrollIntoView)pill.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
+    },10);
+  },{passive:true});
+})();
+
 /* 앱 열 때 시세 자동 갱신 (최근 10분 내 갱신했으면 생략) */
 if(!state.lastFetch||(Date.now()-state.lastFetch>600000)){
   setTimeout(function(){refreshPrices(true);},400);
