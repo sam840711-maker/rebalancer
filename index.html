@@ -151,6 +151,11 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 .msub{font-size:12px;color:var(--txt3);font-family:'IBM Plex Mono',monospace;}
 .mrowm-b{display:flex;flex-wrap:wrap;gap:8px;}
 .mrowm-b .field{flex:1;min-width:120px;}
+.ccmonth{flex-direction:column;}
+.ccline{display:grid;grid-template-columns:22px 1fr;align-items:center;gap:8px;width:100%;}
+.ccline+.ccline{margin-top:6px;}
+.ccline .cclbl{font-size:12px;font-weight:700;color:var(--txt3);text-align:center;}
+.mrowm-b .field .ccline{margin-top:5px;}
 /* ===================== 카드형 리디자인 ===================== */
 .acchead{display:flex;align-items:center;gap:8px;margin-top:18px;flex-wrap:wrap;}
 .hero{position:relative;overflow:hidden;
@@ -401,7 +406,11 @@ function pct0(n){return (n*100).toFixed(1)+"%";}
 function todayStr(){return new Date().toISOString().slice(0,10);}
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
   return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
-function num(v){var d=String(v).replace(/[^0-9.]/g,"");var n=parseFloat(d);return isNaN(n)?0:n;}
+function num(v){var d=String(v).replace(/[^0-9.\-]/g,"");var n=parseFloat(d);return isNaN(n)?0:n;}
+/* 통화별 표시/입력 포맷 — KRW는 정수, USD는 소수 허용 */
+function numFmt(n,dp){n=+n||0;return n.toLocaleString("ko-KR",{minimumFractionDigits:0,maximumFractionDigits:dp==null?0:dp});}
+function moneyInputVal(n,ccy){return ccy==="USD"?numFmt(n,2):won(n);}   // 매입금액 입력칸 표시값
+function qtyInputVal(n,ccy){return ccy==="USD"?numFmt(n,4):won(n);}     // 수량 입력칸 표시값 (USD 소수점 매수)
 function monthsBetween(from){var a=new Date(from),b=new Date();
   var m=(b.getFullYear()-a.getFullYear())*12+(b.getMonth()-a.getMonth());
   if(b.getDate()<a.getDate())m-=1;return Math.max(m,0);}
@@ -491,7 +500,7 @@ function seed(){
       {id:uid(),code:"000001",name:"예시 종목 A",ccy:"KRW",weight:60,lots:[{b:bid,qty:100,cost:900000}]},
       {id:uid(),code:"000002",name:"예시 종목 B",ccy:"KRW",weight:40,lots:[{b:bid,qty:50,cost:900000}]}],
      contributions:cs([["2025-01-02","초기 납입",2000000],
-      ["2025-02-03","",300000],["2025-03-03","",300000]],bid),deployedYM:""}
+      ["2025-02-03","",300000],["2025-03-03","",300000]],bid)}
   ]};
 }
 
@@ -504,6 +513,13 @@ function hCost(h){var s=0,L=h.lots||[],i;for(i=0;i<L.length;i++)s+=(L[i].cost||0
 function fx(){var r=state&&state.fxRate;return (typeof r==="number"&&r>0)?r:1380;}
 /* 통화 환산: ccy 기준 금액을 KRW로. 'USD'면 환율 곱, 그 외 그대로. */
 function inKRW(amt,ccy){return ccy==="USD"?amt*fx():amt;}
+/* 입금 1건의 KRW 환산 — USD는 기록된 입금시점 환율(fxAt) 사용, 없으면 현재환율 폴백.
+   환차손익이 과거 시점에 소급 적용되지 않도록 함(XIRR/총수익률 정확도). */
+function contribKRW(c){
+  if(c.ccy!=="USD")return c.amount;
+  var rate=(typeof c.fxAt==="number"&&c.fxAt>0)?c.fxAt:fx();
+  return c.amount*rate;
+}
 function hCcy(h){return (h&&h.ccy==="USD")?"USD":"KRW";}
 function accCashKRW(acc){var s=0,B=acc.brokers||[],i;for(i=0;i<B.length;i++)s+=(B[i].cashKRW||0);return s;}
 function accCashUSD(acc){var s=0,B=acc.brokers||[],i;for(i=0;i<B.length;i++)s+=(B[i].cashUSD||0);return s;}
@@ -513,7 +529,7 @@ function accCash(acc){return accCashKRW(acc)+accCashUSD(acc)*fx();}
 function ccySym(c){return c==="USD"?"$":"₩";}
 function fmtMoney(amt,ccy){
   ccy=ccy||"KRW";
-  if(ccy==="USD"){var n=+amt||0;return "$"+(Math.abs(n)<100?n.toFixed(2):Math.round(n).toLocaleString("en-US"));}
+  if(ccy==="USD"){var n=+amt||0;return "$"+n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});}
   return "₩"+won(amt);
 }
 function lotFor(h,bid){
@@ -521,31 +537,6 @@ function lotFor(h,bid){
   for(var i=0;i<h.lots.length;i++)if(h.lots[i].b===bid)return h.lots[i];
   var nl={b:bid,qty:0,cost:0};h.lots.push(nl);return nl;
 }
-/* 정수 delta(+매수/−매도)를 각 lot 보유수량 비율대로 분배 (음수 수량 방지) */
-function distributeDelta(weights,delta){
-  var n=weights.length,out=[],i,tot=0;
-  for(i=0;i<n;i++){out.push(0);tot+=weights[i];}
-  if(delta===0||n===0)return out;
-  if(delta>0){
-    if(tot<=0){out[0]=delta;return out;}
-    var rem=delta;
-    for(i=0;i<n;i++){var v=(i===n-1)?rem:Math.round(delta*weights[i]/tot);out[i]=v;rem-=v;}
-  }else{
-    var sell=-delta,rem2=sell;
-    for(i=0;i<n;i++){
-      var want=(i===n-1)?rem2:Math.round(sell*weights[i]/tot);
-      if(want>weights[i])want=weights[i];
-      if(want>rem2)want=rem2;
-      out[i]=-want;rem2-=want;
-    }
-    for(i=0;i<n&&rem2>0;i++){
-      var avail=weights[i]+out[i],more=avail<rem2?avail:rem2;
-      out[i]-=more;rem2-=more;
-    }
-  }
-  return out;
-}
-
 /* ===================== 계산 ===================== */
 function calcAccount(acc,prices){
   var fxR=fx();
@@ -562,7 +553,7 @@ function calcAccount(acc,prices){
   rows.forEach(function(r){r.share=stockValue>0?r.valueKRW/stockValue:0;});
   var totalAsset=stockValue+accCash(acc);
   var sorted=acc.contributions.slice().sort(function(a,b){return a.date<b.date?-1:1;});
-  var contributed=sorted.reduce(function(s,c){return s+inKRW(c.amount,c.ccy);},0);
+  var contributed=sorted.reduce(function(s,c){return s+contribKRW(c);},0);
   var pnl=totalAsset-contributed;
   var totalRet=contributed>0?pnl/contributed:0;
   var first=sorted[0]?sorted[0].date:null;
@@ -571,11 +562,6 @@ function calcAccount(acc,prices){
   var cagr=(first&&contributed>0&&totalAsset>0&&days>=30)?xirr(sorted,totalAsset):null;
   return {rows:rows,stockValue:stockValue,stockCost:stockCost,totalAsset:totalAsset,
     contributed:contributed,pnl:pnl,totalRet:totalRet,months:months,cagr:cagr,first:first,sorted:sorted};
-}
-/* 납입 내역 중 가장 최근 월(YYYY-MM). 배열 정렬과 무관하게 계산. */
-function latestYM(acc){
-  return (acc.contributions||[]).reduce(function(m,c){
-    var k=c.date.slice(0,7);return k>m?k:m;},"");
 }
 /* 리밸런싱: 현재 평가액 + 예수금을 기준(base)으로 각 종목의 목표수량을 구하고,
    현재 보유수량과의 차이만큼 매수/매도 수량을 산출한다(계획 표시 전용).
@@ -634,7 +620,7 @@ function xirr(conts,totalAsset){
   var d0=new Date(conts[0].date).getTime();
   var flows=[];
   for(var i=0;i<conts.length;i++){
-    var amtKRW=inKRW(conts[i].amount,conts[i].ccy);
+    var amtKRW=contribKRW(conts[i]);
     flows.push([(new Date(conts[i].date).getTime()-d0)/86400000,-amtKRW]);
   }
   flows.push([(Date.now()-d0)/86400000,totalAsset]);
@@ -713,24 +699,32 @@ function consolidate(st){
       h.lots=a.brokers.map(function(b){return byB[b.id]||{b:b.id,qty:0,cost:0};});
       delete h.qty;delete h.cost;delete h.avg;
     });
-    /* 입금 내역: 월 + 증권계좌 + 통화 단위로 합산 */
+    /* 입금 내역: 월 + 증권계좌 + 통화 단위로 합산. USD는 입금 시점 환율(fxAt) 가중평균 보존 */
     var map={};
     a.contributions.forEach(function(c){
       if(!c||!c.date)return;
       var bid=(c.b&&brokerIds[c.b])?c.b:firstBid;
       var cc=(c.ccy==="USD")?"USD":"KRW";
       var k=String(c.date).slice(0,7)+"|"+bid+"|"+cc;
-      if(!map[k])map[k]={id:uid(),date:c.date,amount:0,b:bid,ccy:cc};
-      map[k].amount+=(typeof c.amount==="number"&&!isNaN(c.amount)?c.amount:0);
+      var amt=(typeof c.amount==="number"&&!isNaN(c.amount)?c.amount:0);
+      if(!map[k])map[k]={id:uid(),date:c.date,amount:0,b:bid,ccy:cc,_fxw:0};
+      map[k].amount+=amt;
+      if(cc==="USD"){
+        var rate=(typeof c.fxAt==="number"&&c.fxAt>0)?c.fxAt:0;   // 없으면 0 → 나중에 현재환율 폴백
+        map[k]._fxw+=amt*rate;
+      }
       if(c.date<map[k].date)map[k].date=c.date;
     });
-    a.contributions=Object.keys(map).map(function(k){return map[k];})
-      .filter(function(c){return c.amount>0;})
+    a.contributions=Object.keys(map).map(function(k){
+      var c=map[k];
+      if(c.ccy==="USD"){
+        c.fxAt=(c._fxw>0&&c.amount>0)?(c._fxw/c.amount):0;   // 가중평균 환율 (0이면 미기록)
+      }
+      delete c._fxw;
+      return c;
+    }).filter(function(c){return c.amount>0;})
       .sort(function(x,y){return x.date<y.date?-1:1;});
-    if(a.deployedYM===undefined){
-      var lc=a.contributions[a.contributions.length-1];
-      a.deployedYM=lc?lc.date.slice(0,7):"";
-    }
+    delete a.deployedYM;
   });
   return st;
 }
@@ -764,10 +758,19 @@ function proxyFetchJson(targetUrl){
   function step(){
     if(i>=bases.length) return Promise.reject(new Error("proxy failed"));
     var base=bases[i++];
-    return fetch(base+encodeURIComponent(targetUrl)).then(function(r){
+    var ctrl=(typeof AbortController!=="undefined")?new AbortController():null;
+    var timer=ctrl?setTimeout(function(){ctrl.abort();},8000):null;
+    var opts=ctrl?{signal:ctrl.signal}:{};
+    return fetch(base+encodeURIComponent(targetUrl),opts).then(function(r){
       if(!r.ok) throw new Error("HTTP "+r.status);
       return r.text();
-    }).then(function(txt){return JSON.parse(txt);}).catch(function(){return step();});
+    }).then(function(txt){
+      if(timer)clearTimeout(timer);
+      return JSON.parse(txt);
+    }).catch(function(e){
+      if(timer)clearTimeout(timer);
+      return step();
+    });
   }
   return step();
 }
@@ -999,9 +1002,9 @@ function holdingCardHTML(r,i,acc){
     var l0=h.lots[0]||{b:(brokers[0]||{}).id,qty:0,cost:0};
     body='<div class="fields">'
       +'<div class="field"><div class="fl">총 매입금액 ('+sym+')</div>'
-        +'<input class="cardinput" data-edit="lot-cost" data-id="'+h.id+'" data-b="'+l0.b+'" inputmode="decimal" value="'+won(l0.cost||0)+'"'+dis+'></div>'
+        +'<input class="cardinput" data-edit="lot-cost" data-id="'+h.id+'" data-b="'+l0.b+'" inputmode="decimal" value="'+moneyInputVal(l0.cost||0,ccy)+'"'+dis+'></div>'
       +'<div class="field"><div class="fl">보유수량</div>'
-        +'<input class="cardinput" data-edit="lot-qty" data-id="'+h.id+'" data-b="'+l0.b+'" inputmode="decimal" value="'+won(l0.qty||0)+'"'+dis+'></div>'
+        +'<input class="cardinput" data-edit="lot-qty" data-id="'+h.id+'" data-b="'+l0.b+'" inputmode="decimal" value="'+qtyInputVal(l0.qty||0,ccy)+'"'+dis+'></div>'
       +'</div>'+autoFields;
   }else{
     var blks=h.lots.map(function(l){
@@ -1009,14 +1012,14 @@ function holdingCardHTML(r,i,acc){
       return '<div class="lotblk"><div class="lotname">'+esc(bk?bk.name:"증권계좌")+'</div>'
         +'<div class="lotpair">'
         +'<div class="field"><div class="fl">매입수량</div>'
-          +'<input class="cardinput" data-edit="lot-qty" data-id="'+h.id+'" data-b="'+l.b+'" inputmode="decimal" value="'+won(l.qty||0)+'"'+dis+'></div>'
+          +'<input class="cardinput" data-edit="lot-qty" data-id="'+h.id+'" data-b="'+l.b+'" inputmode="decimal" value="'+qtyInputVal(l.qty||0,ccy)+'"'+dis+'></div>'
         +'<div class="field"><div class="fl">매입금액 ('+sym+')</div>'
-          +'<input class="cardinput" data-edit="lot-cost" data-id="'+h.id+'" data-b="'+l.b+'" inputmode="decimal" value="'+won(l.cost||0)+'"'+dis+'></div>'
+          +'<input class="cardinput" data-edit="lot-cost" data-id="'+h.id+'" data-b="'+l.b+'" inputmode="decimal" value="'+moneyInputVal(l.cost||0,ccy)+'"'+dis+'></div>'
         +'</div></div>';
     }).join("");
     body='<div class="lotwrap">'+blks
       +'<div class="lotsum"><span>합계</span>'
-        +'<span>수량 <b id="ltq_'+h.id+'">'+won(totQty)+'</b></span>'
+        +'<span>수량 <b id="ltq_'+h.id+'">'+qtyInputVal(totQty,ccy)+'</b></span>'
         +'<span>매입금액 <b id="ltc_'+h.id+'">'+fmtMoney(totCost,ccy)+'</b></span></div>'
       +'</div>'+autoFields;
   }
@@ -1155,8 +1158,8 @@ function softPort(acc){
     setT("pl_"+r.h.id,(pnl>=0?"+":"−")+fmtMoney(Math.abs(pnl),ccy),pnl>=0?C.mint:C.coral);
     var tq=hQty(r.h);
     var avg=tq>0?r.cost/tq:0;
-    setT("pa_"+r.h.id,fmtMoney(Math.round(avg*100)/100,ccy));
-    setT("ltq_"+r.h.id,won(tq));
+    setT("pa_"+r.h.id,fmtMoney(avg,ccy));
+    setT("ltq_"+r.h.id,qtyInputVal(tq,ccy));
     setT("ltc_"+r.h.id,fmtMoney(hCost(r.h),ccy));
     var pp=el("pp_"+r.h.id);
     if(pp)pp.innerHTML=r.price>0?fmtMoney(r.price,ccy):'<span class="sub">시세 없음</span>';
@@ -1281,22 +1284,26 @@ function softRebal(acc){
 /* ---- 입금 내역 탭 ---- */
 function contribMetricsHTML(stat){
   var w=stat.sorted.filter(function(c){return c.amount>0;});
-  var total=stat.contributed;
+  var months={};w.forEach(function(c){months[c.date.slice(0,7)]=1;});
+  var nMonths=Object.keys(months).length;
+  var total=stat.contributed;   // KRW 환산 (USD는 입금시점 환율)
   return metricHTML("총 납입금","₩"+won(total))
-    +metricHTML("납입 개월수",w.length+"개월")
-    +metricHTML("월 평균 납입","₩"+won(w.length?total/w.length:0))
+    +metricHTML("납입 개월수",nMonths+"개월")
+    +metricHTML("월 평균 납입","₩"+won(nMonths?total/nMonths:0))
     +metricHTML("첫 납입",w[0]?w[0].date.slice(0,7):"—");
 }
 function viewContrib(acc){
   var stat=calcAccount(acc,state.prices);
   var brokers=acc.brokers||[];
   var multi=brokers.length>1;
-  var ymMap={},ymbMap={};
+  /* 월별·통화별 합계 (KRW / USD 분리) */
+  var ymK={},ymU={},ymbK={},ymbU={};
   stat.sorted.forEach(function(c){
-    var k=c.date.slice(0,7);
-    ymMap[k]=(ymMap[k]||0)+c.amount;
-    ymbMap[k+"|"+c.b]=(ymbMap[k+"|"+c.b]||0)+c.amount;
+    var k=c.date.slice(0,7),cc=(c.ccy==="USD")?"USD":"KRW";
+    if(cc==="USD"){ymU[k]=(ymU[k]||0)+c.amount;ymbU[k+"|"+c.b]=(ymbU[k+"|"+c.b]||0)+c.amount;}
+    else{ymK[k]=(ymK[k]||0)+c.amount;ymbK[k+"|"+c.b]=(ymbK[k+"|"+c.b]||0)+c.amount;}
   });
+  var hasUSD=stat.sorted.some(function(c){return c.ccy==="USD";});
   var w=stat.sorted.filter(function(c){return c.amount>0;});
   var nowY=new Date().getFullYear();
   var minY=w.length?parseInt(w[0].date.slice(0,4),10):nowY;
@@ -1304,39 +1311,50 @@ function viewContrib(acc){
   var html='<div class="fade">'+bar("입금 내역")
     +'<div class="metrics" id="m_contrib">'+contribMetricsHTML(stat)+'</div>'
     +'<p class="note" style="margin:2px 2px 4px;line-height:1.7">'
-    +'입금액을 입력하면 해당 증권계좌의 <b style="color:var(--mint)">예수금</b>에 자동으로 더해집니다. '
-    +'매수 후에는 포트폴리오 탭에서 예수금을 실제 잔액으로 수정하세요.</p>';
+    +'입금액을 입력하면 해당 증권계좌의 <b style="color:var(--mint)">예수금</b>에 자동으로 더해집니다.'
+    +(hasUSD?' 외화(USD) 입금은 입금 시점 환율로 기록되어 수익률 계산에 반영됩니다.':'')
+    +' 매수 후에는 포트폴리오 탭에서 예수금을 실제 잔액으로 수정하세요.</p>';
+  /* 한 달 내 입력칸: 단일/멀티 broker × KRW/USD */
+  function moneyCell(ym,bid,ccy,val){
+    return '<input class="cardinput" data-edit="contrib" data-ym="'+ym+'" data-b="'+bid
+      +'" data-ccy="'+ccy+'" inputmode="decimal" value="'+(val?(ccy==="USD"?numFmt(val,2):won(val)):"")
+      +'" placeholder="0">';
+  }
+  function monthBlock(ym2,mm){
+    var kAmt=ymK[ym2]||0,uAmt=ymU[ym2]||0;
+    var sub=(kAmt?"₩"+won(kAmt):"")+(kAmt&&uAmt?" · ":"")+(uAmt?"$"+numFmt(uAmt,2):"");
+    if(!multi){
+      var b0=(brokers[0]||{}).id;
+      var rows='<div class="ccline"><span class="cclbl">₩</span>'+moneyCell(ym2,b0,"KRW",kAmt)+'</div>';
+      if(hasUSD)rows+='<div class="ccline"><span class="cclbl">$</span>'+moneyCell(ym2,b0,"USD",uAmt)+'</div>';
+      return '<div class="mrowm"><div class="mrowm-h"><b>'+mm+'월</b>'
+        +'<span class="msub" id="ms_'+ym2+'">'+(sub||"—")+'</span></div>'
+        +'<div class="mrowm-b ccmonth">'+rows+'</div></div>';
+    }
+    var binputs=brokers.map(function(b){
+      var kk=ymbK[ym2+"|"+b.id]||0,uu=ymbU[ym2+"|"+b.id]||0;
+      var inner='<div class="ccline"><span class="cclbl">₩</span>'+moneyCell(ym2,b.id,"KRW",kk)+'</div>';
+      if(hasUSD)inner+='<div class="ccline"><span class="cclbl">$</span>'+moneyCell(ym2,b.id,"USD",uu)+'</div>';
+      return '<div class="field"><div class="fl">'+esc(b.name)+'</div>'+inner+'</div>';
+    }).join("");
+    return '<div class="mrowm"><div class="mrowm-h"><b>'+mm+'월</b>'
+      +'<span class="msub" id="ms_'+ym2+'">'+(sub||"—")+'</span></div>'
+      +'<div class="mrowm-b">'+binputs+'</div></div>';
+  }
   for(var y=maxY;y>=minY;y--){
-    var yTotal=0;
-    for(var m=1;m<=12;m++){var ym=y+"-"+(m<10?"0"+m:m);yTotal+=ymMap[ym]||0;}
+    var yK=0,yU=0;
+    for(var m=1;m<=12;m++){var ym=y+"-"+(m<10?"0"+m:m);yK+=ymK[ym]||0;yU+=ymU[ym]||0;}
+    var ytot=(yK?"₩"+won(yK):"")+(yK&&yU?" · ":"")+(yU?"$"+numFmt(yU,2):"");
     var open=!!ui.openYears[y];
     html+='<div class="ycard">'
       +'<button class="yhead" data-act="toggle-year" data-year="'+y+'">'
       +'<span class="ychev">'+(open?"\u25be":"\u25b8")+'</span>'
       +'<span class="yname">'+y+'년</span>'
-      +'<span class="ytotal mono" id="yt_'+y+'">₩'+won(yTotal)+'</span></button>';
+      +'<span class="ytotal mono" id="yt_'+y+'">'+(ytot||"—")+'</span></button>';
     if(open){
       var months="";
-      for(var mm=1;mm<=12;mm++){
-        var ym2=y+"-"+(mm<10?"0"+mm:mm);
-        if(!multi){
-          var amt=ymMap[ym2]||0;
-          months+='<div class="mrow"><span class="mlabel">'+mm+'월</span>'
-            +'<input class="input minput" data-edit="contrib" data-ym="'+ym2+'" data-b="'+(brokers[0]||{}).id+'" inputmode="decimal" value="'
-            +(amt?won(amt):"")+'" placeholder="0"></div>';
-        }else{
-          var binputs=brokers.map(function(b){
-            var bv=ymbMap[ym2+"|"+b.id]||0;
-            return '<div class="field"><div class="fl">'+esc(b.name)+'</div>'
-              +'<input class="cardinput" data-edit="contrib" data-ym="'+ym2+'" data-b="'+b.id+'" inputmode="decimal" value="'
-              +(bv?won(bv):"")+'" placeholder="0"></div>';
-          }).join("");
-          months+='<div class="mrowm"><div class="mrowm-h"><b>'+mm+'월</b>'
-            +'<span class="msub" id="ms_'+ym2+'">₩'+won(ymMap[ym2]||0)+'</span></div>'
-            +'<div class="mrowm-b">'+binputs+'</div></div>';
-        }
-      }
-      html+='<div class="mgrid'+(multi?" multi":"")+'">'+months+'</div>';
+      for(var mm=1;mm<=12;mm++){var ym2=y+"-"+(mm<10?"0"+mm:mm);months+=monthBlock(ym2,mm);}
+      html+='<div class="mgrid multi">'+months+'</div>';
     }
     html+='</div>';
   }
@@ -1345,18 +1363,23 @@ function viewContrib(acc){
 function softContrib(acc){
   var stat=calcAccount(acc,state.prices);
   if(el("m_contrib"))el("m_contrib").innerHTML=contribMetricsHTML(stat);
-  var ymMap={};
-  stat.sorted.forEach(function(c){var k=c.date.slice(0,7);ymMap[k]=(ymMap[k]||0)+c.amount;});
+  var ymK={},ymU={};
+  stat.sorted.forEach(function(c){
+    var k=c.date.slice(0,7);
+    if(c.ccy==="USD")ymU[k]=(ymU[k]||0)+c.amount;else ymK[k]=(ymK[k]||0)+c.amount;
+  });
+  function fmt(k){
+    var kk=ymK[k]||0,uu=ymU[k]||0;
+    return (kk?"₩"+won(kk):"")+(kk&&uu?" · ":"")+(uu?"$"+numFmt(uu,2):"")||"—";
+  }
   var nodes=document.querySelectorAll('[id^="yt_"]');
   for(var i=0;i<nodes.length;i++){
-    var y=nodes[i].id.slice(3),t=0;
-    for(var m=1;m<=12;m++){var ym=y+"-"+(m<10?"0"+m:m);t+=ymMap[ym]||0;}
-    nodes[i].textContent="₩"+won(t);
+    var y=nodes[i].id.slice(3),tk=0,tu=0;
+    for(var m=1;m<=12;m++){var ym=y+"-"+(m<10?"0"+m:m);tk+=ymK[ym]||0;tu+=ymU[ym]||0;}
+    nodes[i].textContent=(tk?"₩"+won(tk):"")+(tk&&tu?" · ":"")+(tu?"$"+numFmt(tu,2):"")||"—";
   }
   var ms=document.querySelectorAll('[id^="ms_"]');
-  for(var j=0;j<ms.length;j++){
-    ms[j].textContent="₩"+won(ymMap[ms[j].id.slice(3)]||0);
-  }
+  for(var j=0;j<ms.length;j++)ms[j].textContent=fmt(ms[j].id.slice(3));
 }
 
 /* ---- 공통 푸터 ---- */
@@ -1565,8 +1588,12 @@ el("app").addEventListener("click",function(e){
         var c=acc.contributions[i];
         if(c.date.slice(0,7)===qym&&c.b===bid&&(c.ccy||"KRW")===ccy){ex=c;break;}}
       var old=ex?ex.amount:0;
-      if(ex)ex.amount=amt;
-      else acc.contributions.push({id:uid(),date:qym+"-01",amount:amt,b:bid,ccy:ccy});
+      if(ex){ex.amount=amt;if(ccy==="USD")ex.fxAt=fx();}
+      else{
+        var nc={id:uid(),date:qym+"-01",amount:amt,b:bid,ccy:ccy};
+        if(ccy==="USD")nc.fxAt=fx();
+        acc.contributions.push(nc);
+      }
       var bk=qbs.filter(function(b){return b.id===bid;})[0];
       if(bk){
         if(ccy==="USD")bk.cashUSD=(bk.cashUSD||0)+(amt-old);
@@ -1635,7 +1662,8 @@ el("app").addEventListener("click",function(e){
 /* 계좌 추가 (모달) */
 function addAccount(){
   promptModal("새 계좌","계좌 이름","",function(name){
-    var na={id:uid(),name:name,cash:0,holdings:[],contributions:[],deployedYM:""};
+    var na={id:uid(),name:name,holdings:[],contributions:[],
+      brokers:[{id:uid(),name:"증권계좌",cashKRW:0,cashUSD:0}]};
     state.accounts.push(na);save();
     ui.accId=na.id;ui.tab="port";render();toast("계좌를 추가했습니다.");
   });
@@ -1758,8 +1786,12 @@ el("app").addEventListener("input",function(e){
       var cc=acc.contributions[ci];
       if(cc.date.slice(0,7)===ym&&cc.b===cbid&&(cc.ccy||"KRW")===ccc){ent=cc;break;}}
     var oldAmt=ent?ent.amount:0;
-    if(ent)ent.amount=cv;
-    else if(cv>0)acc.contributions.push({id:uid(),date:ym+"-01",amount:cv,b:cbid,ccy:ccc});
+    if(ent){ent.amount=cv;if(ccc==="USD")ent.fxAt=fx();}
+    else if(cv>0){
+      var nc={id:uid(),date:ym+"-01",amount:cv,b:cbid,ccy:ccc};
+      if(ccc==="USD")nc.fxAt=fx();
+      acc.contributions.push(nc);
+    }
     var cbk=(acc.brokers||[]).filter(function(b){return b.id===cbid;})[0];
     if(cbk){
       if(ccc==="USD")cbk.cashUSD=(cbk.cashUSD||0)+(cv-oldAmt);
@@ -1854,7 +1886,7 @@ try{history.replaceState({accId:ui.accId,tab:ui.tab},"");}catch(e){}
     if(ui.editPort)return;
     if(!e.touches||e.touches.length!==1)return;
     var t=e.target;
-    if(t&&t.closest&&t.closest("input,textarea,select,button,a,[contenteditable],.lotwrap,.cashrow,.hcrow"))return;
+    if(t&&t.closest&&t.closest("input,textarea,select,button,a,[contenteditable],.lotwrap,.cashrow,.hcrow,.ccline,.mgrid"))return;
     sx=e.touches[0].clientX;sy=e.touches[0].clientY;sT=Date.now();tracking=true;
   },{passive:true});
   appEl.addEventListener("touchend",function(e){
