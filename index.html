@@ -411,7 +411,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 var C={mint:"#4ade80",coral:"#fb7185",gold:"#f5b942",blue:"#609cf6",
   txt:"#e9efea",txt2:"#8b968f",txt3:"#5e6a63",line:"#262b27",bg3:"#1b201d"};
 var SLICE=["#4ade80","#609cf6","#f5b942","#fb7185","#a78bfa","#22d3ee"];
-var APP_VER="v0.9a";   // 빌드 버전 (하단 표시)
+var APP_VER="v0.9b";   // 빌드 버전 (하단 표시)
 function uid(){return Math.random().toString(36).slice(2,9);}
 function won(n){return Math.round(n||0).toLocaleString("ko-KR");}
 function pct(n){return (n>=0?"+":"")+(n*100).toFixed(2)+"%";}
@@ -1437,7 +1437,9 @@ function foot(){
     +'<div class="gdbtns">'+gbtns+'</div>'
     +'<p class="note" style="margin-top:8px;line-height:1.65">연결하면 데이터 변경 시 자동으로 '
     +'<b style="color:var(--txt2)">본인 드라이브의 앱 전용 폴더</b>에 전체 계좌가 한 번에 백업됩니다. '
-    +'새 기기에서도 연결 후 <b style="color:var(--mint)">복원</b> 한 번이면 됩니다.</p>'
+    +'새 기기에서도 연결 후 <b style="color:var(--mint)">복원</b> 한 번이면 됩니다.'
+    +(gdLinked()?"":' <button class="linkbtn" data-act="gd-setup" style="font-size:11px">다른 클라이언트 ID 사용</button>')
+    +'</p>'
     +'</div>';
   return '<div class="foot">'
     +'<button class="ghost" data-act="reset">초기 데이터로 재설정</button>'
@@ -1535,17 +1537,21 @@ function undoRebalance(){
    - 데이터 변경 시 디바운스(60초) 자동 백업 + 수동 백업
    - latest.json(항상 최신) 덮어쓰기, 복원 시 그 파일을 읽어 선택 복원 모달로 연결
    scope drive.appdata: 본 앱이 만든 파일만 접근(전체 Drive 권한 아님 → 프라이버시·심사 부담 적음) */
-var GD_CLIENT_ID="";   // 설정에서 입력 (OAuth 클라이언트 ID)
+/* 기본 OAuth 클라이언트 ID — SH Portfolio/Pilot Logbook과 동일(본인 Cloud 프로젝트).
+   공개돼도 되는 값. 비워두면 설정 모달에서 다른 ID로 교체 가능. */
+var GD_DEFAULT_CID="836300793486-tm7ai7ehdllc2031mjev3e248af8mgt1.apps.googleusercontent.com";
+var GD_CLIENT_ID="";   // 사용자 지정 ID (없으면 기본값 사용)
 var GD={tokenClient:null,linked:false,backingUp:false};
 var GD_KEYS={cid:"rebalancer:gdrive_cid",linked:"rebalancer:gdrive_linked",
   tok:"rebalancer:gdrive_tok",exp:"rebalancer:gdrive_exp",auto:"rebalancer:gdrive_auto"};
+function gdCid(){return GD_CLIENT_ID||GD_DEFAULT_CID;}
 function gdLoadCfg(){
   try{GD_CLIENT_ID=localStorage.getItem(GD_KEYS.cid)||"";}catch(e){}
   try{GD.linked=localStorage.getItem(GD_KEYS.linked)==="1";}catch(e){}
 }
 function gdReady(){return typeof google!=="undefined"&&google.accounts&&google.accounts.oauth2;}
 function gdOnline(){return typeof navigator==="undefined"||navigator.onLine!==false;}
-function gdLinked(){return GD.linked&&!!GD_CLIENT_ID;}
+function gdLinked(){return GD.linked&&!!gdCid();}
 /* 세션 토큰 — sessionStorage 보관(재로드해도 세션 동안 유지, 새 탭/종료 시 사라짐) */
 function gdGetStoredToken(){
   try{
@@ -1564,11 +1570,11 @@ function gdClearToken(){try{sessionStorage.removeItem(GD_KEYS.tok);sessionStorag
 function gdConnected(){return !!gdGetStoredToken();}
 /* 토큰 클라이언트 초기화 (CLIENT_ID 있을 때만) */
 function gdInitClient(){
-  if(!gdReady()||!GD_CLIENT_ID)return false;
+  if(!gdReady()||!gdCid())return false;
   if(GD.tokenClient)return true;
   try{
     GD.tokenClient=google.accounts.oauth2.initTokenClient({
-      client_id:GD_CLIENT_ID,
+      client_id:gdCid(),
       scope:"https://www.googleapis.com/auth/drive.appdata",
       callback:function(){}    // 매 요청마다 교체
     });
@@ -1635,7 +1641,7 @@ function gdDownload(name){
 }
 /* 연결(최초 동의) — 사용자 액션 */
 function gdConnect(){
-  if(!GD_CLIENT_ID){gdOpenSetup();return;}
+  if(!gdCid()){gdOpenSetup();return;}
   if(!gdReady()){toast("Google 모듈 로딩 중 — 잠시 후 다시 시도하세요.");return;}
   if(!gdOnline()){toast("오프라인 — 인터넷 연결 후 시도하세요.");return;}
   gdGetTokenSmart().then(function(){
@@ -1719,18 +1725,17 @@ function gdScheduleAuto(){
 }
 /* CLIENT_ID 설정 모달 */
 function gdOpenSetup(){
-  modal({title:"Google 드라이브 연결 설정",
-    body:'<p class="mtext" style="line-height:1.7">Google 자동 백업을 쓰려면 <b>OAuth 클라이언트 ID</b>가 한 번 필요합니다. '
-      +'Google Cloud Console에서 만든 웹 클라이언트 ID를 붙여넣으세요. '
-      +'(데이터는 본인 드라이브의 앱 전용 숨김 폴더에만 저장됩니다.)</p>'
+  modal({title:"클라이언트 ID 변경 (선택)",
+    body:'<p class="mtext" style="line-height:1.7">기본 클라이언트 ID가 내장되어 있어 그냥 <b>Google 계정 연결</b>만 누르면 됩니다. '
+      +'본인 Google Cloud 프로젝트의 다른 클라이언트 ID를 쓰려면 여기에 붙여넣으세요. '
+      +'<b>비워두고 저장하면 기본값</b>으로 돌아갑니다. (데이터는 본인 드라이브의 앱 전용 숨김 폴더에만 저장됩니다.)</p>'
       +'<div class="fl" style="margin-top:10px">클라이언트 ID</div>'
-      +'<input class="minput-f" data-minput data-mfield="cid" placeholder="xxxx.apps.googleusercontent.com" value="'+esc(GD_CLIENT_ID)+'">',
+      +'<input class="minput-f" data-minput data-mfield="cid" placeholder="'+esc(GD_DEFAULT_CID)+'" value="'+esc(GD_CLIENT_ID)+'">',
     okText:"저장 후 연결",cancelText:"닫기",
     onOk:function(val,fields){
       var cid=(fields.cid||val||"").trim();
-      if(!cid){toast("클라이언트 ID를 입력하세요.");return;}
       GD_CLIENT_ID=cid;GD.tokenClient=null;
-      try{localStorage.setItem(GD_KEYS.cid,cid);}catch(e){}
+      try{if(cid)localStorage.setItem(GD_KEYS.cid,cid);else localStorage.removeItem(GD_KEYS.cid);}catch(e){}
       gdConnect();
     }});
 }
