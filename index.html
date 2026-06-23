@@ -411,7 +411,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 var C={mint:"#4ade80",coral:"#fb7185",gold:"#f5b942",blue:"#609cf6",
   txt:"#e9efea",txt2:"#8b968f",txt3:"#5e6a63",line:"#262b27",bg3:"#1b201d"};
 var SLICE=["#4ade80","#609cf6","#f5b942","#fb7185","#a78bfa","#22d3ee"];
-var APP_VER="v0.9b";   // 빌드 버전 (하단 표시)
+var APP_VER="v0.9c";   // 빌드 버전 (하단 표시)
 function uid(){return Math.random().toString(36).slice(2,9);}
 function won(n){return Math.round(n||0).toLocaleString("ko-KR");}
 function pct(n){return (n>=0?"+":"")+(n*100).toFixed(2)+"%";}
@@ -1416,7 +1416,7 @@ function foot(){
     var dotCls="gddot on",cloudTxt;
     if(GD.backingUp)cloudTxt="백업 중…";
     else if(!gdOnline()){cloudTxt="연결됨 · 오프라인";dotCls="gddot";}
-    else if(!gdConnected())cloudTxt="연결됨 · 자동 재연결 대기";
+    else if(!gdConnected()){cloudTxt="연결됨 · 백업/복원 시 자동 재연결";dotCls="gddot";}
     else{
       cloudTxt="연결됨";
       if(state.lastCloudBackup){
@@ -1594,7 +1594,7 @@ function gdGetToken(interactive){
       }else reject(new Error(resp&&resp.error?resp.error:"토큰을 받지 못했습니다."));
     };
     try{
-      GD.tokenClient.requestAccessToken({prompt:interactive?"consent":""});
+      GD.tokenClient.requestAccessToken({prompt:interactive?"consent":"none"});
     }catch(e){reject(e);}
   });
 }
@@ -1665,13 +1665,12 @@ function gdDisconnect(){
 }
 /* 앱 시작 시 무음 자동 재연결 — 이전에 연결했고 온라인이면 팝업 없이 토큰만 갱신.
    무음 실패(동의 만료 등)면 플래그는 유지하고 사용자가 '연결'을 한 번 누르도록 둠. */
-function gdAutoReconnect(tries){
-  tries=tries==null?12:tries;
-  if(gdConnected()){render();return;}                 // 세션 토큰 살아있음
-  if(!gdLinked()||!gdOnline()){render();return;}
-  if(!gdReady()){if(tries>0)setTimeout(function(){gdAutoReconnect(tries-1);},500);else render();return;}
-  gdGetToken(false).then(function(){render();maybeAutoBackup();})
-    .catch(function(){render();});                     // 무음 실패 → 연결 버튼 노출
+/* 앱 시작 시 — 세션에 살아있는 토큰이 있으면 그대로 연결 상태, 없으면 상태만 갱신.
+   부팅 때 토큰을 요청하지 않으므로 로그인 창이 깜빡이지 않는다.
+   토큰은 실제 백업/복원 시 (또는 자동 백업 시 살아있을 때만) 사용. */
+function gdAutoReconnect(){
+  if(gdConnected()){render();maybeAutoBackup();return;}   // 세션 토큰 살아있음 → 그대로
+  render();   // 토큰 없으면 그냥 상태만 — 사용자가 백업/복원 누를 때 토큰 획득
 }
 /* 백업 실행 — latest.json 덮어쓰기. 토큰 없으면 (silent일 땐) 팝업 안 띄우고 조용히 종료 */
 function gdBackupNow(silent){
