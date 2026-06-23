@@ -135,6 +135,9 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 .gddot.on{background:#4ade80;box-shadow:0 0 0 3px rgba(74,222,128,.15);}
 .gdtxt{font-size:11.5px;color:var(--txt3);font-weight:600;}
 .gdbtns{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px;}
+.verline{margin-top:18px;text-align:center;font-size:11px;color:var(--txt3);
+  letter-spacing:.02em;font-family:'IBM Plex Mono',monospace;}
+.verline b{color:var(--txt2);font-weight:600;}
 .divider{height:34px;width:1px;background:var(--line);}
 .empty{text-align:center;color:var(--txt2);padding:64px 20px;font-size:14px;line-height:1.9;}
 .linkbtn{background:none;border:none;color:var(--txt3);font-family:inherit;font-size:11px;cursor:pointer;text-decoration:underline;padding:0;}
@@ -407,6 +410,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 var C={mint:"#4ade80",coral:"#fb7185",gold:"#f5b942",blue:"#609cf6",
   txt:"#e9efea",txt2:"#8b968f",txt3:"#5e6a63",line:"#262b27",bg3:"#1b201d"};
 var SLICE=["#4ade80","#609cf6","#f5b942","#fb7185","#a78bfa","#22d3ee"];
+var APP_VER="v0.9";   // 빌드 버전 (하단 표시)
 function uid(){return Math.random().toString(36).slice(2,9);}
 function won(n){return Math.round(n||0).toLocaleString("ko-KR");}
 function pct(n){return (n>=0?"+":"")+(n*100).toFixed(2)+"%";}
@@ -1436,7 +1440,8 @@ function foot(){
     +gcard
     +'<p class="note" style="margin-top:10px;line-height:1.75">'
     +'파일로 직접 백업·복원하려면 화면 맨 위 <b style="color:var(--mint)">⤒ 백업</b> · '
-    +'<b style="color:var(--mint)">⤓ 복원</b> 버튼을 사용하세요.</p>';
+    +'<b style="color:var(--mint)">⤓ 복원</b> 버튼을 사용하세요.</p>'
+    +'<div class="verline">리밸런서 <b>'+APP_VER+'</b></div>';
 }
 
 /* ===================== 메인 렌더 ===================== */
