@@ -12,6 +12,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
 <link rel="manifest" href="manifest.json">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 :root{
@@ -127,6 +128,13 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 .lbl{font-size:11px;color:var(--txt3);font-weight:600;margin-bottom:4px;}
 .note{color:var(--txt3);font-size:11px;line-height:1.6;}
 .foot{display:flex;gap:8px;flex-wrap:wrap;margin-top:30px;padding-top:18px;border-top:1px solid var(--line);}
+.gdcard{margin-top:14px;background:var(--bg2);border:1px solid var(--line);border-radius:13px;padding:14px 15px;}
+.gdhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.gdtitle{font-size:13.5px;font-weight:700;color:var(--txt);margin-right:auto;}
+.gddot{width:8px;height:8px;border-radius:50%;background:var(--txt3);flex-shrink:0;}
+.gddot.on{background:#4ade80;box-shadow:0 0 0 3px rgba(74,222,128,.15);}
+.gdtxt{font-size:11.5px;color:var(--txt3);font-weight:600;}
+.gdbtns{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px;}
 .divider{height:34px;width:1px;background:var(--line);}
 .empty{text-align:center;color:var(--txt2);padding:64px 20px;font-size:14px;line-height:1.9;}
 .linkbtn{background:none;border:none;color:var(--txt3);font-family:inherit;font-size:11px;cursor:pointer;text-decoration:underline;padding:0;}
@@ -899,9 +907,11 @@ function load(){try{var r=localStorage.getItem(STORE);if(r)return JSON.parse(r);
 function save(){
   if(ui.editPort)return;   // 수정 모드 중에는 저장 보류 (저장 버튼으로 확정)
   clearTimeout(saveTimer);saveTimer=setTimeout(function(){
-  try{localStorage.setItem(STORE,JSON.stringify(state));}catch(e){}},400);}
+  try{localStorage.setItem(STORE,JSON.stringify(state));}catch(e){}},400);
+  if(typeof gdScheduleAuto==="function")gdScheduleAuto();}
 function saveNow(){clearTimeout(saveTimer);
-  try{localStorage.setItem(STORE,JSON.stringify(state));}catch(e){}}
+  try{localStorage.setItem(STORE,JSON.stringify(state));}catch(e){}
+  if(typeof gdScheduleAuto==="function")gdScheduleAuto();}
 function activeAcc(){return state.accounts.filter(function(a){return a.id===ui.accId;})[0];}
 
 /* ===================== 렌더: 빌더 ===================== */
@@ -1395,12 +1405,37 @@ function foot(){
     bk='<span class="note" style="align-self:center;color:'+C.gold
       +'">아직 백업한 적 없음 · 백업을 권장합니다</span>';
   }
+  /* Google 자동 백업 카드 */
+  var gstatus,gbtns;
+  if(GD.linked&&GD_CLIENT_ID){
+    var cloudTxt="연결됨";
+    if(GD.backingUp)cloudTxt="백업 중…";
+    else if(state.lastCloudBackup){
+      var cd=Math.floor((Date.now()-state.lastCloudBackup)/86400000);
+      cloudTxt="연결됨 · 마지막 클라우드 백업 "+(cd<=0?"오늘":cd+"일 전");
+    }
+    gstatus='<span class="gddot on"></span><span class="gdtxt" id="gdState">'+cloudTxt+'</span>';
+    gbtns='<button class="ghost sm" data-act="gd-backup">지금 백업</button>'
+      +'<button class="ghost sm" data-act="gd-restore">복원</button>'
+      +'<button class="ghost sm" data-act="gd-disconnect">연결 해제</button>';
+  }else{
+    gstatus='<span class="gddot"></span><span class="gdtxt" id="gdState">연결 안 됨</span>';
+    gbtns='<button class="btn sm" data-act="gd-connect">Google 계정 연결</button>';
+  }
+  var gcard='<div class="gdcard">'
+    +'<div class="gdhead"><span class="gdtitle">☁ Google 드라이브 자동 백업</span>'+gstatus+'</div>'
+    +'<div class="gdbtns">'+gbtns+'</div>'
+    +'<p class="note" style="margin-top:8px;line-height:1.65">연결하면 데이터 변경 시 자동으로 '
+    +'<b style="color:var(--txt2)">본인 드라이브의 앱 전용 폴더</b>에 백업됩니다. '
+    +'새 기기에서도 연결 후 <b style="color:var(--mint)">복원</b> 한 번이면 됩니다.</p>'
+    +'</div>';
   return '<div class="foot">'
     +'<button class="ghost" data-act="reset">초기 데이터로 재설정</button>'
     +'<div style="flex:1"></div>'
     +bk+'</div>'
+    +gcard
     +'<p class="note" style="margin-top:10px;line-height:1.75">'
-    +'백업 저장과 복원은 화면 맨 위 <b style="color:var(--mint)">⤒ 백업</b> · '
+    +'파일로 직접 백업·복원하려면 화면 맨 위 <b style="color:var(--mint)">⤒ 백업</b> · '
     +'<b style="color:var(--mint)">⤓ 복원</b> 버튼을 사용하세요.</p>';
 }
 
@@ -1484,6 +1519,183 @@ function undoRebalance(){
   state=undoState;undoState=null;save();render();
   toast("직전 상태로 되돌렸습니다.");
 }
+/* ===================== Google Drive 자동 백업 =====================
+   GIS(Google Identity Services) 토큰 방식 + Drive appDataFolder(앱 전용 숨김 폴더).
+   - 1회 연결 후 localStorage(gdrive_linked)에 플래그 → 다음 실행 때 조용히 자동 재연결
+   - 데이터 변경 시 디바운스(60초) 자동 백업 + 수동 백업
+   - latest.json(항상 최신) 덮어쓰기, 복원 시 그 파일을 읽어 선택 복원 모달로 연결
+   scope drive.appdata: 본 앱이 만든 파일만 접근(전체 Drive 권한 아님 → 프라이버시·심사 부담 적음) */
+var GD_CLIENT_ID="";   // 설정에서 입력 (OAuth 클라이언트 ID)
+var GD={token:null,exp:0,tokenClient:null,linked:false,backingUp:false,file:null};
+var GD_KEYS={cid:"rebalancer:gdrive_cid",linked:"rebalancer:gdrive_linked"};
+function gdLoadCfg(){
+  try{GD_CLIENT_ID=localStorage.getItem(GD_KEYS.cid)||"";}catch(e){}
+  try{GD.linked=localStorage.getItem(GD_KEYS.linked)==="1";}catch(e){}
+}
+function gdReady(){return typeof google!=="undefined"&&google.accounts&&google.accounts.oauth2;}
+function gdHasToken(){return GD.token&&Date.now()<GD.exp-60000;}
+/* 토큰 클라이언트 초기화 (CLIENT_ID 있을 때만) */
+function gdInitClient(){
+  if(!gdReady()||!GD_CLIENT_ID)return false;
+  if(GD.tokenClient)return true;
+  try{
+    GD.tokenClient=google.accounts.oauth2.initTokenClient({
+      client_id:GD_CLIENT_ID,
+      scope:"https://www.googleapis.com/auth/drive.appdata",
+      callback:function(){}    // 매 요청마다 교체
+    });
+    return true;
+  }catch(e){return false;}
+}
+/* 토큰 확보 — 필요 시 동의창(interactive) 또는 무음(silent) */
+function gdGetToken(interactive){
+  return new Promise(function(resolve,reject){
+    if(gdHasToken())return resolve(GD.token);
+    if(!gdInitClient())return reject(new Error("Google 연결을 사용할 수 없습니다. 클라이언트 ID를 확인하세요."));
+    GD.tokenClient.callback=function(resp){
+      if(resp&&resp.access_token){
+        GD.token=resp.access_token;
+        GD.exp=Date.now()+(resp.expires_in?resp.expires_in*1000:3600000);
+        resolve(GD.token);
+      }else reject(new Error("토큰을 받지 못했습니다."));
+    };
+    try{
+      GD.tokenClient.requestAccessToken({prompt:interactive?"consent":""});
+    }catch(e){reject(e);}
+  });
+}
+/* Drive REST 호출 (fetch + Authorization) */
+function gdFetch(url,opts){
+  opts=opts||{};opts.headers=opts.headers||{};
+  opts.headers.Authorization="Bearer "+GD.token;
+  return fetch(url,opts);
+}
+/* appDataFolder 에서 latest.json 파일 ID 찾기 */
+function gdFindFile(name){
+  var q=encodeURIComponent("name='"+name+"' and 'appDataFolder' in parents and trashed=false");
+  return gdFetch("https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id,name,modifiedTime)&q="+q)
+    .then(function(r){if(!r.ok)throw new Error("목록 조회 실패("+r.status+")");return r.json();})
+    .then(function(d){return (d.files&&d.files[0])||null;});
+}
+/* 업로드(생성/덮어쓰기) — multipart */
+function gdUpload(name,json){
+  var meta={name:name};
+  return gdFindFile(name).then(function(existing){
+    var boundary="rbz"+Date.now();
+    var body="--"+boundary+"\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"
+      +JSON.stringify(existing?{}:{name:name,parents:["appDataFolder"]})
+      +"\r\n--"+boundary+"\r\nContent-Type: application/json\r\n\r\n"+json
+      +"\r\n--"+boundary+"--";
+    var url=existing
+      ? "https://www.googleapis.com/upload/drive/v3/files/"+existing.id+"?uploadType=multipart"
+      : "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
+    return gdFetch(url,{method:existing?"PATCH":"POST",
+      headers:{"Content-Type":"multipart/related; boundary="+boundary},body:body});
+  }).then(function(r){if(!r.ok)throw new Error("업로드 실패("+r.status+")");return r.json();});
+}
+/* 다운로드 — latest.json 내용 */
+function gdDownload(name){
+  return gdFindFile(name).then(function(f){
+    if(!f)throw new Error("백업 파일이 없습니다.");
+    return gdFetch("https://www.googleapis.com/drive/v3/files/"+f.id+"?alt=media")
+      .then(function(r){if(!r.ok)throw new Error("다운로드 실패("+r.status+")");return r.text();});
+  });
+}
+/* 연결(최초 동의) */
+function gdConnect(){
+  if(!GD_CLIENT_ID){gdOpenSetup();return;}
+  if(!gdReady()){toast("Google 모듈 로딩 중 — 잠시 후 다시 시도하세요.");return;}
+  gdGetToken(true).then(function(){
+    GD.linked=true;
+    try{localStorage.setItem(GD_KEYS.linked,"1");}catch(e){}
+    render();
+    toast("Google 계정이 연결되었습니다.");
+    gdBackupNow(true);   // 연결 직후 1회 백업
+  }).catch(function(e){
+    toast("연결 실패: "+(e&&e.message||"알 수 없는 오류"));
+  });
+}
+/* 연결 해제 */
+function gdDisconnect(){
+  if(GD.token&&gdReady()){try{google.accounts.oauth2.revoke(GD.token,function(){});}catch(e){}}
+  GD.token=null;GD.exp=0;GD.linked=false;
+  try{localStorage.removeItem(GD_KEYS.linked);}catch(e){}
+  render();toast("Google 연결을 해제했습니다.");
+}
+/* 앱 시작 시 무음 자동 재연결 (이전에 연결한 적 있으면) */
+function gdAutoReconnect(){
+  gdLoadCfg();
+  if(!GD.linked||!GD_CLIENT_ID)return;
+  var tries=0;
+  (function wait(){
+    if(gdReady()){
+      gdGetToken(false).then(function(){render();}).catch(function(){
+        /* 무음 실패(동의 만료 등) → 사용자에게 재연결 유도, 플래그는 유지 */
+        render();
+      });
+    }else if(tries++<40){setTimeout(wait,150);}
+  })();
+}
+/* 백업 실행 — latest.json 덮어쓰기 */
+function gdBackupNow(silent){
+  if(!GD.linked||!GD_CLIENT_ID){if(!silent)gdConnect();return Promise.resolve(false);}
+  if(GD.backingUp)return Promise.resolve(false);
+  if(typeof navigator!=="undefined"&&navigator.onLine===false){
+    if(!silent)toast("오프라인 — 인터넷 연결 후 백업됩니다.");return Promise.resolve(false);
+  }
+  var json;try{json=JSON.stringify(state);}catch(e){if(!silent)toast("백업 데이터를 만들 수 없습니다.");return Promise.resolve(false);}
+  GD.backingUp=true;if(el("gdState"))render();
+  return gdGetToken(false).then(function(){
+    return gdUpload("latest.json",json);
+  }).then(function(){
+    GD.backingUp=false;
+    state.lastBackup=Date.now();state.lastCloudBackup=Date.now();save();
+    if(el("gdState"))render();
+    if(!silent)toast("Google 드라이브에 백업했습니다.");
+    return true;
+  }).catch(function(e){
+    GD.backingUp=false;if(el("gdState"))render();
+    if(!silent)toast("백업 실패: "+(e&&e.message||"오류"));
+    return false;
+  });
+}
+/* 복원 — latest.json 읽어 선택 복원 모달로 */
+function gdRestore(){
+  if(!GD.linked||!GD_CLIENT_ID){gdConnect();return;}
+  if(typeof navigator!=="undefined"&&navigator.onLine===false){toast("오프라인 — 인터넷 연결 후 복원하세요.");return;}
+  toast("드라이브에서 백업을 불러오는 중…");
+  gdGetToken(false).then(function(){return gdDownload("latest.json");})
+    .then(function(txt){
+      var data=JSON.parse(txt);
+      if(!data||!Array.isArray(data.accounts))throw new Error("백업 형식 오류");
+      openRestoreModal(consolidate(data));
+    }).catch(function(e){toast("복원 실패: "+(e&&e.message||"오류"));});
+}
+/* 자동 백업 디바운스 (데이터 변경 후 60초) */
+var gdAutoTimer=null;
+function gdScheduleAuto(){
+  if(!GD.linked||!GD_CLIENT_ID)return;
+  clearTimeout(gdAutoTimer);
+  gdAutoTimer=setTimeout(function(){gdBackupNow(true);},60000);
+}
+/* CLIENT_ID 설정 모달 */
+function gdOpenSetup(){
+  modal({title:"Google 드라이브 연결 설정",
+    body:'<p class="mtext" style="line-height:1.7">Google 자동 백업을 쓰려면 <b>OAuth 클라이언트 ID</b>가 한 번 필요합니다. '
+      +'Google Cloud Console에서 만든 웹 클라이언트 ID를 붙여넣으세요. '
+      +'(데이터는 본인 드라이브의 앱 전용 숨김 폴더에만 저장됩니다.)</p>'
+      +'<div class="fl" style="margin-top:10px">클라이언트 ID</div>'
+      +'<input class="minput-f" data-minput data-mfield="cid" placeholder="xxxx.apps.googleusercontent.com" value="'+esc(GD_CLIENT_ID)+'">',
+    okText:"저장 후 연결",cancelText:"닫기",
+    onOk:function(val,fields){
+      var cid=(fields.cid||val||"").trim();
+      if(!cid){toast("클라이언트 ID를 입력하세요.");return;}
+      GD_CLIENT_ID=cid;GD.tokenClient=null;
+      try{localStorage.setItem(GD_KEYS.cid,cid);}catch(e){}
+      gdConnect();
+    }});
+}
+
 /* 백업 파일 다운로드 (모든 환경에서 동작하는 기본 경로) */
 function downloadBackup(json,fname){
   try{
@@ -1653,6 +1865,14 @@ el("app").addEventListener("click",function(e){
   else if(act==="export"){exportData();}
   else if(act==="share-backup"){shareBackup();}
   else if(act==="import"){el("importer").click();}
+  else if(act==="gd-connect"){gdConnect();}
+  else if(act==="gd-backup"){gdBackupNow(false);}
+  else if(act==="gd-restore"){gdRestore();}
+  else if(act==="gd-disconnect"){
+    confirmModal("연결 해제","Google 드라이브 연결을 해제할까요? 이미 백업된 파일은 드라이브에 남습니다.",
+      function(){gdDisconnect();},false,"연결 해제");
+  }
+  else if(act==="gd-setup"){gdOpenSetup();}
   else if(act==="reset"){
     confirmModal("초기화","모든 데이터를 초기 상태로 되돌릴까요? 현재 데이터가 사라집니다.",function(){
       state=consolidate(seed());undoState=null;save();ui.accId=null;ui.showBrokers=false;render();toast("초기 데이터로 재설정했습니다.");
@@ -1875,8 +2095,11 @@ function applyRestore(backup,ids){
 
 /* ===================== 시작 ===================== */
 state=consolidate(load()||seed());
+gdLoadCfg();
 render();
 try{history.replaceState({accId:ui.accId,tab:ui.tab},"");}catch(e){}
+/* Google 드라이브 자동 재연결 (이전에 연결한 적 있으면 조용히) */
+if(typeof gdAutoReconnect==="function")gdAutoReconnect();
 /* 좌우 스와이프로 계좌 전환 — 입력/버튼/링크 위 터치는 제외, 수정 모드 중엔 비활성 */
 (function(){
   var appEl=el("app");
