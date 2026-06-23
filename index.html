@@ -411,7 +411,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 var C={mint:"#4ade80",coral:"#fb7185",gold:"#f5b942",blue:"#609cf6",
   txt:"#e9efea",txt2:"#8b968f",txt3:"#5e6a63",line:"#262b27",bg3:"#1b201d"};
 var SLICE=["#4ade80","#609cf6","#f5b942","#fb7185","#a78bfa","#22d3ee"];
-var APP_VER="v0.9";   // 빌드 버전 (하단 표시)
+var APP_VER="v0.9a";   // 빌드 버전 (하단 표시)
 function uid(){return Math.random().toString(36).slice(2,9);}
 function won(n){return Math.round(n||0).toLocaleString("ko-KR");}
 function pct(n){return (n>=0?"+":"")+(n*100).toFixed(2)+"%";}
@@ -1412,14 +1412,19 @@ function foot(){
   }
   /* Google 자동 백업 카드 */
   var gstatus,gbtns;
-  if(GD.linked&&GD_CLIENT_ID){
-    var cloudTxt="연결됨";
+  if(gdLinked()){
+    var dotCls="gddot on",cloudTxt;
     if(GD.backingUp)cloudTxt="백업 중…";
-    else if(state.lastCloudBackup){
-      var cd=Math.floor((Date.now()-state.lastCloudBackup)/86400000);
-      cloudTxt="연결됨 · 마지막 클라우드 백업 "+(cd<=0?"오늘":cd+"일 전");
+    else if(!gdOnline()){cloudTxt="연결됨 · 오프라인";dotCls="gddot";}
+    else if(!gdConnected())cloudTxt="연결됨 · 자동 재연결 대기";
+    else{
+      cloudTxt="연결됨";
+      if(state.lastCloudBackup){
+        var cd=Math.floor((Date.now()-state.lastCloudBackup)/86400000);
+        cloudTxt="연결됨 · 마지막 백업 "+(cd<=0?"오늘":cd+"일 전");
+      }
     }
-    gstatus='<span class="gddot on"></span><span class="gdtxt" id="gdState">'+cloudTxt+'</span>';
+    gstatus='<span class="'+dotCls+'"></span><span class="gdtxt" id="gdState">'+cloudTxt+'</span>';
     gbtns='<button class="ghost sm" data-act="gd-backup">지금 백업</button>'
       +'<button class="ghost sm" data-act="gd-restore">복원</button>'
       +'<button class="ghost sm" data-act="gd-disconnect">연결 해제</button>';
@@ -1431,7 +1436,7 @@ function foot(){
     +'<div class="gdhead"><span class="gdtitle">☁ Google 드라이브 자동 백업</span>'+gstatus+'</div>'
     +'<div class="gdbtns">'+gbtns+'</div>'
     +'<p class="note" style="margin-top:8px;line-height:1.65">연결하면 데이터 변경 시 자동으로 '
-    +'<b style="color:var(--txt2)">본인 드라이브의 앱 전용 폴더</b>에 백업됩니다. '
+    +'<b style="color:var(--txt2)">본인 드라이브의 앱 전용 폴더</b>에 전체 계좌가 한 번에 백업됩니다. '
     +'새 기기에서도 연결 후 <b style="color:var(--mint)">복원</b> 한 번이면 됩니다.</p>'
     +'</div>';
   return '<div class="foot">'
@@ -1531,14 +1536,32 @@ function undoRebalance(){
    - latest.json(항상 최신) 덮어쓰기, 복원 시 그 파일을 읽어 선택 복원 모달로 연결
    scope drive.appdata: 본 앱이 만든 파일만 접근(전체 Drive 권한 아님 → 프라이버시·심사 부담 적음) */
 var GD_CLIENT_ID="";   // 설정에서 입력 (OAuth 클라이언트 ID)
-var GD={token:null,exp:0,tokenClient:null,linked:false,backingUp:false,file:null};
-var GD_KEYS={cid:"rebalancer:gdrive_cid",linked:"rebalancer:gdrive_linked"};
+var GD={tokenClient:null,linked:false,backingUp:false};
+var GD_KEYS={cid:"rebalancer:gdrive_cid",linked:"rebalancer:gdrive_linked",
+  tok:"rebalancer:gdrive_tok",exp:"rebalancer:gdrive_exp",auto:"rebalancer:gdrive_auto"};
 function gdLoadCfg(){
   try{GD_CLIENT_ID=localStorage.getItem(GD_KEYS.cid)||"";}catch(e){}
   try{GD.linked=localStorage.getItem(GD_KEYS.linked)==="1";}catch(e){}
 }
 function gdReady(){return typeof google!=="undefined"&&google.accounts&&google.accounts.oauth2;}
-function gdHasToken(){return GD.token&&Date.now()<GD.exp-60000;}
+function gdOnline(){return typeof navigator==="undefined"||navigator.onLine!==false;}
+function gdLinked(){return GD.linked&&!!GD_CLIENT_ID;}
+/* 세션 토큰 — sessionStorage 보관(재로드해도 세션 동안 유지, 새 탭/종료 시 사라짐) */
+function gdGetStoredToken(){
+  try{
+    var t=sessionStorage.getItem(GD_KEYS.tok),e=+sessionStorage.getItem(GD_KEYS.exp)||0;
+    if(t&&Date.now()<e-60000)return t;
+  }catch(e){}
+  return null;
+}
+function gdSetStoredToken(t,expiresIn){
+  try{
+    sessionStorage.setItem(GD_KEYS.tok,t);
+    sessionStorage.setItem(GD_KEYS.exp,String(Date.now()+(expiresIn?expiresIn*1000:3600000)));
+  }catch(e){}
+}
+function gdClearToken(){try{sessionStorage.removeItem(GD_KEYS.tok);sessionStorage.removeItem(GD_KEYS.exp);}catch(e){}}
+function gdConnected(){return !!gdGetStoredToken();}
 /* 토큰 클라이언트 초기화 (CLIENT_ID 있을 때만) */
 function gdInitClient(){
   if(!gdReady()||!GD_CLIENT_ID)return false;
@@ -1552,27 +1575,31 @@ function gdInitClient(){
     return true;
   }catch(e){return false;}
 }
-/* 토큰 확보 — 필요 시 동의창(interactive) 또는 무음(silent) */
+/* 토큰 확보 — interactive=true면 동의창, false면 무음(이미 동의했을 때만 성공) */
 function gdGetToken(interactive){
   return new Promise(function(resolve,reject){
-    if(gdHasToken())return resolve(GD.token);
+    var stored=gdGetStoredToken();
+    if(stored)return resolve(stored);
     if(!gdInitClient())return reject(new Error("Google 연결을 사용할 수 없습니다. 클라이언트 ID를 확인하세요."));
     GD.tokenClient.callback=function(resp){
       if(resp&&resp.access_token){
-        GD.token=resp.access_token;
-        GD.exp=Date.now()+(resp.expires_in?resp.expires_in*1000:3600000);
-        resolve(GD.token);
-      }else reject(new Error("토큰을 받지 못했습니다."));
+        gdSetStoredToken(resp.access_token,resp.expires_in);
+        resolve(resp.access_token);
+      }else reject(new Error(resp&&resp.error?resp.error:"토큰을 받지 못했습니다."));
     };
     try{
       GD.tokenClient.requestAccessToken({prompt:interactive?"consent":""});
     }catch(e){reject(e);}
   });
 }
+/* 무음 우선 → 실패 시 동의 (사용자 액션에서만 사용) */
+function gdGetTokenSmart(){
+  return gdGetToken(false).catch(function(){return gdGetToken(true);});
+}
 /* Drive REST 호출 (fetch + Authorization) */
 function gdFetch(url,opts){
   opts=opts||{};opts.headers=opts.headers||{};
-  opts.headers.Authorization="Bearer "+GD.token;
+  opts.headers.Authorization="Bearer "+gdGetStoredToken();
   return fetch(url,opts);
 }
 /* appDataFolder 에서 latest.json 파일 ID 찾기 */
@@ -1606,55 +1633,55 @@ function gdDownload(name){
       .then(function(r){if(!r.ok)throw new Error("다운로드 실패("+r.status+")");return r.text();});
   });
 }
-/* 연결(최초 동의) */
+/* 연결(최초 동의) — 사용자 액션 */
 function gdConnect(){
   if(!GD_CLIENT_ID){gdOpenSetup();return;}
   if(!gdReady()){toast("Google 모듈 로딩 중 — 잠시 후 다시 시도하세요.");return;}
-  gdGetToken(true).then(function(){
+  if(!gdOnline()){toast("오프라인 — 인터넷 연결 후 시도하세요.");return;}
+  gdGetTokenSmart().then(function(){
     GD.linked=true;
-    try{localStorage.setItem(GD_KEYS.linked,"1");}catch(e){}
+    try{localStorage.setItem(GD_KEYS.linked,"1");localStorage.setItem(GD_KEYS.auto,"1");}catch(e){}
     render();
     toast("Google 계정이 연결되었습니다.");
-    gdBackupNow(true);   // 연결 직후 1회 백업
+    gdBackupNow(true);   // 연결 직후 1회 백업 (토큰 살아있으니 팝업 없음)
   }).catch(function(e){
     toast("연결 실패: "+(e&&e.message||"알 수 없는 오류"));
   });
 }
 /* 연결 해제 */
 function gdDisconnect(){
-  if(GD.token&&gdReady()){try{google.accounts.oauth2.revoke(GD.token,function(){});}catch(e){}}
-  GD.token=null;GD.exp=0;GD.linked=false;
-  try{localStorage.removeItem(GD_KEYS.linked);}catch(e){}
+  var t=gdGetStoredToken();
+  if(t&&gdReady()){try{google.accounts.oauth2.revoke(t,function(){});}catch(e){}}
+  gdClearToken();
+  GD.linked=false;
+  try{localStorage.removeItem(GD_KEYS.linked);localStorage.removeItem(GD_KEYS.auto);}catch(e){}
   render();toast("Google 연결을 해제했습니다.");
 }
-/* 앱 시작 시 무음 자동 재연결 (이전에 연결한 적 있으면) */
-function gdAutoReconnect(){
-  gdLoadCfg();
-  if(!GD.linked||!GD_CLIENT_ID)return;
-  var tries=0;
-  (function wait(){
-    if(gdReady()){
-      gdGetToken(false).then(function(){render();}).catch(function(){
-        /* 무음 실패(동의 만료 등) → 사용자에게 재연결 유도, 플래그는 유지 */
-        render();
-      });
-    }else if(tries++<40){setTimeout(wait,150);}
-  })();
+/* 앱 시작 시 무음 자동 재연결 — 이전에 연결했고 온라인이면 팝업 없이 토큰만 갱신.
+   무음 실패(동의 만료 등)면 플래그는 유지하고 사용자가 '연결'을 한 번 누르도록 둠. */
+function gdAutoReconnect(tries){
+  tries=tries==null?12:tries;
+  if(gdConnected()){render();return;}                 // 세션 토큰 살아있음
+  if(!gdLinked()||!gdOnline()){render();return;}
+  if(!gdReady()){if(tries>0)setTimeout(function(){gdAutoReconnect(tries-1);},500);else render();return;}
+  gdGetToken(false).then(function(){render();maybeAutoBackup();})
+    .catch(function(){render();});                     // 무음 실패 → 연결 버튼 노출
 }
-/* 백업 실행 — latest.json 덮어쓰기 */
+/* 백업 실행 — latest.json 덮어쓰기. 토큰 없으면 (silent일 땐) 팝업 안 띄우고 조용히 종료 */
 function gdBackupNow(silent){
-  if(!GD.linked||!GD_CLIENT_ID){if(!silent)gdConnect();return Promise.resolve(false);}
+  if(!gdLinked()){if(!silent)gdConnect();return Promise.resolve(false);}
   if(GD.backingUp)return Promise.resolve(false);
-  if(typeof navigator!=="undefined"&&navigator.onLine===false){
-    if(!silent)toast("오프라인 — 인터넷 연결 후 백업됩니다.");return Promise.resolve(false);
-  }
+  if(!gdOnline()){if(!silent)toast("오프라인 — 인터넷 연결 후 백업됩니다.");return Promise.resolve(false);}
+  if(silent&&!gdConnected())return Promise.resolve(false);   // 무음 백업은 살아있는 토큰 있을 때만
   var json;try{json=JSON.stringify(state);}catch(e){if(!silent)toast("백업 데이터를 만들 수 없습니다.");return Promise.resolve(false);}
   GD.backingUp=true;if(el("gdState"))render();
-  return gdGetToken(false).then(function(){
+  var getTok=silent?gdGetToken(false):gdGetTokenSmart();
+  return getTok.then(function(){
     return gdUpload("latest.json",json);
   }).then(function(){
     GD.backingUp=false;
     state.lastBackup=Date.now();state.lastCloudBackup=Date.now();save();
+    try{localStorage.setItem(GD_KEYS.auto,"1");localStorage.setItem("rebalancer:gdrive_last",String(Date.now()));}catch(e){}
     if(el("gdState"))render();
     if(!silent)toast("Google 드라이브에 백업했습니다.");
     return true;
@@ -1664,22 +1691,29 @@ function gdBackupNow(silent){
     return false;
   });
 }
+/* 부팅/기회 시 자동 백업 — 살아있는 토큰이 있을 때만(팝업 절대 없음), 마지막 백업 24h 경과 시 */
+function maybeAutoBackup(){
+  if(!gdLinked()||!gdConnected())return;
+  var last=0;try{last=+localStorage.getItem("rebalancer:gdrive_last")||0;}catch(e){}
+  if(Date.now()-last<24*3600*1000)return;
+  gdBackupNow(true);
+}
 /* 복원 — latest.json 읽어 선택 복원 모달로 */
 function gdRestore(){
-  if(!GD.linked||!GD_CLIENT_ID){gdConnect();return;}
-  if(typeof navigator!=="undefined"&&navigator.onLine===false){toast("오프라인 — 인터넷 연결 후 복원하세요.");return;}
+  if(!gdLinked()){gdConnect();return;}
+  if(!gdOnline()){toast("오프라인 — 인터넷 연결 후 복원하세요.");return;}
   toast("드라이브에서 백업을 불러오는 중…");
-  gdGetToken(false).then(function(){return gdDownload("latest.json");})
+  gdGetTokenSmart().then(function(){return gdDownload("latest.json");})
     .then(function(txt){
       var data=JSON.parse(txt);
       if(!data||!Array.isArray(data.accounts))throw new Error("백업 형식 오류");
       openRestoreModal(consolidate(data));
     }).catch(function(e){toast("복원 실패: "+(e&&e.message||"오류"));});
 }
-/* 자동 백업 디바운스 (데이터 변경 후 60초) */
+/* 자동 백업 디바운스 (데이터 변경 후 60초) — 토큰 살아있을 때만 실제 업로드 */
 var gdAutoTimer=null;
 function gdScheduleAuto(){
-  if(!GD.linked||!GD_CLIENT_ID)return;
+  if(!gdLinked())return;
   clearTimeout(gdAutoTimer);
   gdAutoTimer=setTimeout(function(){gdBackupNow(true);},60000);
 }
@@ -2104,8 +2138,12 @@ gdLoadCfg();
 if(el("appVer"))el("appVer").textContent=APP_VER;
 render();
 try{history.replaceState({accId:ui.accId,tab:ui.tab},"");}catch(e){}
-/* Google 드라이브 자동 재연결 (이전에 연결한 적 있으면 조용히) */
-if(typeof gdAutoReconnect==="function")gdAutoReconnect();
+/* Google 드라이브 자동 재연결 (이전에 연결한 적 있으면 조용히, 팝업 없음) */
+if(typeof gdAutoReconnect==="function"){
+  setTimeout(function(){gdAutoReconnect();},700);
+  window.addEventListener("online",function(){gdAutoReconnect();});
+  window.addEventListener("offline",function(){if(typeof render==="function")render();});
+}
 /* 좌우 스와이프로 계좌 전환 — 입력/버튼/링크 위 터치는 제외, 수정 모드 중엔 비활성 */
 (function(){
   var appEl=el("app");
