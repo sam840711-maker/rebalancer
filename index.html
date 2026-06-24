@@ -144,6 +144,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 .gdpick-when{flex:1;}
 .gdpick-tag{font-size:10px;font-weight:700;color:var(--mint);background:rgba(74,222,128,.12);
   padding:2px 8px;border-radius:6px;letter-spacing:.03em;}
+.gdpick-tag.legacy{color:var(--gold);background:rgba(245,185,66,.12);}
 .verline{margin:8px 0 26px;text-align:center;font-size:11px;color:var(--txt3);
   letter-spacing:.02em;font-family:'IBM Plex Mono',monospace;}
 .verline b{color:var(--txt2);font-weight:600;}
@@ -431,7 +432,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 var C={mint:"#4ade80",coral:"#fb7185",gold:"#f5b942",blue:"#609cf6",
   txt:"#e9efea",txt2:"#8b968f",txt3:"#5e6a63",line:"#262b27",bg3:"#1b201d"};
 var SLICE=["#4ade80","#609cf6","#f5b942","#fb7185","#a78bfa","#22d3ee"];
-var APP_VER="v0.9l";   // 빌드 버전 (하단 표시)
+var APP_VER="v0.9m";   // 빌드 버전 (하단 표시)
 function uid(){return Math.random().toString(36).slice(2,9);}
 function won(n){return Math.round(n||0).toLocaleString("ko-KR");}
 function pct(n){return (n>=0?"+":"")+(n*100).toFixed(2)+"%";}
@@ -1772,7 +1773,7 @@ function gdDeleteId(id){
 /* 구버전 단일 latest.json 도 읽을 수 있게 (마이그레이션) */
 function gdFindFile(name){
   var q=encodeURIComponent("name='"+name+"' and 'appDataFolder' in parents and trashed=false");
-  return gdFetch("https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id,name,modifiedTime)&q="+q)
+  return gdFetch("https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id,name,modifiedTime,size)&q="+q)
     .then(function(r){if(!r.ok)throw new Error("목록 조회 실패("+r.status+")");return r.json();})
     .then(function(d){return (d.files&&d.files[0])||null;});
 }
@@ -1854,16 +1855,23 @@ function gdRestore(){
   gdGetTokenSmart().then(function(){
     GD.linked=true;
     try{localStorage.setItem(GD_KEYS.linked,"1");localStorage.setItem(GD_KEYS.auto,"1");}catch(e){}
-    return gdListBackups();
-  }).then(function(files){
+    /* 타임스탬프 백업 + 구버전 latest.json 을 함께 모아 항상 시점 목록으로 보여줌 */
+    return Promise.all([
+      gdListBackups().catch(function(){return [];}),
+      gdFindFile("latest.json").catch(function(){return null;})
+    ]);
+  }).then(function(res){
     render();
-    if(!files.length){
-      /* 구버전 단일 latest.json 폴백 */
-      return gdFindFile("latest.json").then(function(f){
-        if(!f){toast("드라이브에 백업이 없습니다. 먼저 백업하세요.");return;}
-        return gdDownloadId(f.id).then(function(txt){gdApplyRestoreText(txt);});
-      });
+    var files=res[0]||[];
+    var legacy=res[1];
+    if(legacy){
+      /* latest.json 을 목록에 합치기 (중복 아님 — 이름이 다름) */
+      legacy._legacy=true;
+      files=files.concat([legacy]);
     }
+    /* 최신순 정렬 (modifiedTime 기준) */
+    files.sort(function(a,b){return (b.modifiedTime||"")<(a.modifiedTime||"")?-1:1;});
+    if(!files.length){toast("드라이브에 백업이 없습니다. 먼저 백업하세요.");return;}
     openGdBackupPicker(files);
   }).catch(function(e){
     render();
@@ -1880,9 +1888,11 @@ function gdBackupLabel(f){
 }
 function openGdBackupPicker(files){
   var rows=files.slice(0,30).map(function(f,i){
+    var tag=i===0?'<span class="gdpick-tag">최신</span>':'';
+    if(f._legacy)tag='<span class="gdpick-tag legacy">이전 백업</span>';
     return '<button class="gdpick" data-gdpick="'+f.id+'">'
       +'<span class="gdpick-when">'+esc(gdBackupLabel(f))+'</span>'
-      +(i===0?'<span class="gdpick-tag">최신</span>':'')+'</button>';
+      +tag+'</button>';
   }).join("");
   modal({title:"백업 시점 선택",
     body:'<p class="mtext" style="line-height:1.6;margin-bottom:10px">복원할 백업 시점을 고르세요. '
