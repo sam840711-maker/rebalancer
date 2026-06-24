@@ -1,5 +1,5 @@
 /* 리밸런서 서비스워커 — 오프라인 + 설치 지원 */
-var CACHE = "rebalancer-v1";
+var CACHE = "rebalancer-v2";
 var ASSETS = ["./","./index.html","./manifest.json","./icon-192.png","./icon-512.png"];
 
 self.addEventListener("install", function(e){
