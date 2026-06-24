@@ -135,6 +135,15 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 .gddot.on{background:#4ade80;box-shadow:0 0 0 3px rgba(74,222,128,.15);}
 .gdtxt{font-size:11.5px;color:var(--txt3);font-weight:600;}
 .gdbtns{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px;}
+.gdpicklist{display:flex;flex-direction:column;gap:7px;max-height:50vh;overflow-y:auto;}
+.gdpick{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;
+  text-align:left;background:var(--bg3);border:1px solid var(--line);border-radius:10px;
+  padding:12px 14px;color:var(--txt);font-size:13.5px;font-weight:600;cursor:pointer;
+  font-family:'IBM Plex Mono',monospace;}
+.gdpick:active{background:var(--bg2);}
+.gdpick-when{flex:1;}
+.gdpick-tag{font-size:10px;font-weight:700;color:var(--mint);background:rgba(74,222,128,.12);
+  padding:2px 8px;border-radius:6px;letter-spacing:.03em;}
 .verline{margin:8px 0 26px;text-align:center;font-size:11px;color:var(--txt3);
   letter-spacing:.02em;font-family:'IBM Plex Mono',monospace;}
 .verline b{color:var(--txt2);font-weight:600;}
@@ -422,7 +431,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 var C={mint:"#4ade80",coral:"#fb7185",gold:"#f5b942",blue:"#609cf6",
   txt:"#e9efea",txt2:"#8b968f",txt3:"#5e6a63",line:"#262b27",bg3:"#1b201d"};
 var SLICE=["#4ade80","#609cf6","#f5b942","#fb7185","#a78bfa","#22d3ee"];
-var APP_VER="v0.9k";   // 빌드 버전 (하단 표시)
+var APP_VER="v0.9l";   // 빌드 버전 (하단 표시)
 function uid(){return Math.random().toString(36).slice(2,9);}
 function won(n){return Math.round(n||0).toLocaleString("ko-KR");}
 function pct(n){return (n>=0?"+":"")+(n*100).toFixed(2)+"%";}
@@ -487,6 +496,17 @@ el("modal").addEventListener("click",function(e){
     return;
   }
   if(e.target.closest("[data-mlookup]")){e.preventDefault();modalLookup();return;}
+  var gp=e.target.closest("[data-gdpick]");
+  if(gp){
+    e.preventDefault();
+    var fid=gp.getAttribute("data-gdpick");
+    closeModal();
+    toast("백업을 불러오는 중…");
+    gdGetTokenSmart().then(function(){return gdDownloadId(fid);})
+      .then(function(txt){gdApplyRestoreText(txt);})
+      .catch(function(err){toast("복원 실패: "+((err&&err.message)||"오류"));});
+    return;
+  }
   if(e.target.closest('[data-act="use-suggested-proxy"]')){
     e.preventDefault();
     var pin=el("modal").querySelector('[data-mfield="purl"]');
@@ -1717,36 +1737,44 @@ function gdFetch(url,opts){
   opts.headers.Authorization="Bearer "+gdGetStoredToken();
   return fetch(url,opts);
 }
-/* appDataFolder 에서 latest.json 파일 ID 찾기 */
+/* appDataFolder 백업 목록 (최신순) — 시점 선택 복원용 */
+function gdListBackups(){
+  var url="https://www.googleapis.com/drive/v3/files?spaces=appDataFolder"
+    +"&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc&pageSize=100"
+    +"&q="+encodeURIComponent("name contains 'rebalancer_' and trashed=false");
+  return gdFetch(url)
+    .then(function(r){if(!r.ok)throw new Error("목록 조회 실패("+r.status+")");return r.json();})
+    .then(function(d){return (d.files||[]).filter(function(f){return /^rebalancer_.*\.json$/.test(f.name);});});
+}
+/* 타임스탬프 파일로 새 백업 생성 (덮어쓰지 않고 누적) */
+function gdUploadNew(json){
+  var name="rebalancer_"+new Date().toISOString().replace(/[:.]/g,"-")+".json";
+  var meta={name:name,parents:["appDataFolder"]};
+  var boundary="rbz"+Date.now();
+  var body="--"+boundary+"\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"
+    +JSON.stringify(meta)
+    +"\r\n--"+boundary+"\r\nContent-Type: application/json\r\n\r\n"+json
+    +"\r\n--"+boundary+"--";
+  return gdFetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime",
+    {method:"POST",headers:{"Content-Type":"multipart/related; boundary="+boundary},body:body})
+    .then(function(r){if(!r.ok)throw new Error("업로드 실패("+r.status+")");return r.json();});
+}
+/* 파일 ID로 내용 다운로드 */
+function gdDownloadId(id){
+  return gdFetch("https://www.googleapis.com/drive/v3/files/"+id+"?alt=media")
+    .then(function(r){if(!r.ok)throw new Error("다운로드 실패("+r.status+")");return r.text();});
+}
+/* 파일 삭제 (보존 정리용) */
+function gdDeleteId(id){
+  return gdFetch("https://www.googleapis.com/drive/v3/files/"+id,{method:"DELETE"})
+    .then(function(){return true;}).catch(function(){return false;});
+}
+/* 구버전 단일 latest.json 도 읽을 수 있게 (마이그레이션) */
 function gdFindFile(name){
   var q=encodeURIComponent("name='"+name+"' and 'appDataFolder' in parents and trashed=false");
   return gdFetch("https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id,name,modifiedTime)&q="+q)
     .then(function(r){if(!r.ok)throw new Error("목록 조회 실패("+r.status+")");return r.json();})
     .then(function(d){return (d.files&&d.files[0])||null;});
-}
-/* 업로드(생성/덮어쓰기) — multipart */
-function gdUpload(name,json){
-  var meta={name:name};
-  return gdFindFile(name).then(function(existing){
-    var boundary="rbz"+Date.now();
-    var body="--"+boundary+"\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"
-      +JSON.stringify(existing?{}:{name:name,parents:["appDataFolder"]})
-      +"\r\n--"+boundary+"\r\nContent-Type: application/json\r\n\r\n"+json
-      +"\r\n--"+boundary+"--";
-    var url=existing
-      ? "https://www.googleapis.com/upload/drive/v3/files/"+existing.id+"?uploadType=multipart"
-      : "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
-    return gdFetch(url,{method:existing?"PATCH":"POST",
-      headers:{"Content-Type":"multipart/related; boundary="+boundary},body:body});
-  }).then(function(r){if(!r.ok)throw new Error("업로드 실패("+r.status+")");return r.json();});
-}
-/* 다운로드 — latest.json 내용 */
-function gdDownload(name){
-  return gdFindFile(name).then(function(f){
-    if(!f)throw new Error("백업 파일이 없습니다.");
-    return gdFetch("https://www.googleapis.com/drive/v3/files/"+f.id+"?alt=media")
-      .then(function(r){if(!r.ok)throw new Error("다운로드 실패("+r.status+")");return r.text();});
-  });
 }
 /* 연결(최초 동의) — 사용자 액션 */
 function gdConnect(){
@@ -1781,20 +1809,24 @@ function gdAutoReconnect(){
   if(gdConnected()){render();maybeAutoBackup();return;}   // 세션 토큰 살아있음 → 그대로
   render();   // 토큰 없으면 그냥 상태만 — 사용자가 백업/복원 누를 때 토큰 획득
 }
-/* 백업 실행 — latest.json 덮어쓰기. 토큰 없으면 (silent일 땐) 팝업 안 띄우고 조용히 종료 */
+/* 백업 실행 — 타임스탬프 파일로 새로 저장(시점별 누적) + 최신 30개 보존 */
 function gdBackupNow(silent){
   if(!gdLinked()){if(!silent)gdConnect();return Promise.resolve(false);}
   if(GD.backingUp)return Promise.resolve(false);
   if(!gdOnline()){if(!silent)toast("오프라인 — 인터넷 연결 후 백업됩니다.");return Promise.resolve(false);}
   if(silent&&!gdConnected())return Promise.resolve(false);   // 무음 백업은 살아있는 토큰 있을 때만
-  /* 빈/예시 데이터는 클라우드를 덮어쓰지 않음 (자동 백업 한정).
-     수동 "지금 백업"은 사용자가 의도한 것이므로 허용. */
-  if(silent&&isTrivialState()){return Promise.resolve(false);}
+  if(silent&&isTrivialState()){return Promise.resolve(false);}  // 빈/예시 데이터 자동백업 차단
   var json;try{json=JSON.stringify(state);}catch(e){if(!silent)toast("백업 데이터를 만들 수 없습니다.");return Promise.resolve(false);}
   GD.backingUp=true;if(el("gdState"))render();
   var getTok=silent?gdGetToken(false):gdGetTokenSmart();
   return getTok.then(function(){
-    return gdUpload("latest.json",json);
+    return gdUploadNew(json);
+  }).then(function(){
+    /* 보존 정리 — 최신 30개만 남기고 삭제 */
+    return gdListBackups().then(function(files){
+      var extra=files.slice(30);
+      return Promise.all(extra.map(function(f){return gdDeleteId(f.id);}));
+    }).catch(function(){});
   }).then(function(){
     GD.backingUp=false;
     state.lastBackup=Date.now();state.lastCloudBackup=Date.now();save();
@@ -1815,36 +1847,62 @@ function maybeAutoBackup(){
   if(Date.now()-last<24*3600*1000)return;
   gdBackupNow(true);
 }
-/* 복원 — latest.json 읽어 선택 복원 모달로 */
+/* 복원 — 백업 시점 목록을 보여주고 사용자가 고른 시점을 복원 */
 function gdRestore(){
   if(!gdOnline()){toast("오프라인 — 인터넷 연결 후 복원하세요.");return;}
-  toast("Google 드라이브에서 백업을 불러오는 중…");
-  /* 미연결(재설치 등)이어도 토큰을 받아 바로 복원까지 진행 — 동의창 한 번이면 끝 */
+  toast("Google 드라이브에서 백업 목록을 불러오는 중…");
   gdGetTokenSmart().then(function(){
-    /* 복원 시도 시점에 연결 상태로 표시 */
     GD.linked=true;
     try{localStorage.setItem(GD_KEYS.linked,"1");localStorage.setItem(GD_KEYS.auto,"1");}catch(e){}
-    return gdDownload("latest.json");
-  }).then(function(txt){
-    var data=JSON.parse(txt);
-    if(!data||!Array.isArray(data.accounts))throw new Error("백업 형식 오류");
+    return gdListBackups();
+  }).then(function(files){
     render();
-    var cons=consolidate(data);
-    /* 드라이브 백업이 예시/빈 데이터로 보이면 경고 후 진행 여부 확인 */
-    var savedState=state;state=cons;var trivial=isTrivialState();state=savedState;
-    if(trivial){
-      confirmModal("백업이 비어 있음",
-        "드라이브의 백업이 예시 데이터이거나 비어 있습니다. 그래도 복원 화면을 열까요?",
-        function(){openRestoreModal(cons);},false,"열기");
-      return;
+    if(!files.length){
+      /* 구버전 단일 latest.json 폴백 */
+      return gdFindFile("latest.json").then(function(f){
+        if(!f){toast("드라이브에 백업이 없습니다. 먼저 백업하세요.");return;}
+        return gdDownloadId(f.id).then(function(txt){gdApplyRestoreText(txt);});
+      });
     }
-    openRestoreModal(cons);
+    openGdBackupPicker(files);
   }).catch(function(e){
     render();
-    var msg=(e&&e.message)||"오류";
-    if(msg.indexOf("백업 파일이 없습니다")>=0)toast("드라이브에 백업이 없습니다. 먼저 백업하세요.");
-    else toast("복원 실패: "+msg);
+    toast("복원 실패: "+((e&&e.message)||"오류"));
   });
+}
+/* 백업 시점 선택 모달 */
+function gdBackupLabel(f){
+  var d=new Date(f.modifiedTime);
+  var p=function(n){return n<10?"0"+n:""+n;};
+  var when=(d.getFullYear())+"."+p(d.getMonth()+1)+"."+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes());
+  var kb=f.size?Math.max(1,Math.round(+f.size/1024)):null;
+  return when+(kb?(" · "+kb+"KB"):"");
+}
+function openGdBackupPicker(files){
+  var rows=files.slice(0,30).map(function(f,i){
+    return '<button class="gdpick" data-gdpick="'+f.id+'">'
+      +'<span class="gdpick-when">'+esc(gdBackupLabel(f))+'</span>'
+      +(i===0?'<span class="gdpick-tag">최신</span>':'')+'</button>';
+  }).join("");
+  modal({title:"백업 시점 선택",
+    body:'<p class="mtext" style="line-height:1.6;margin-bottom:10px">복원할 백업 시점을 고르세요. '
+      +'선택하면 계좌별 복원 화면으로 넘어갑니다.</p>'
+      +'<div class="gdpicklist">'+rows+'</div>',
+    okText:null,cancelText:"닫기"});
+}
+/* 다운로드한 백업 텍스트를 복원 모달로 연결 (공통) */
+function gdApplyRestoreText(txt){
+  var data=JSON.parse(txt);
+  if(!data||!Array.isArray(data.accounts))throw new Error("백업 형식 오류");
+  var cons=consolidate(data);
+  var savedState=state;state=cons;var trivial=isTrivialState();state=savedState;
+  if(trivial){
+    confirmModal("백업이 비어 있음",
+      "이 백업이 예시 데이터이거나 비어 있습니다. 그래도 복원 화면을 열까요?",
+      function(){openRestoreModal(cons);},false,"열기");
+    return;
+  }
+  openRestoreModal(cons);
 }
 /* 자동 백업 디바운스 (데이터 변경 후 60초) — 토큰 살아있을 때만 실제 업로드 */
 var gdAutoTimer=null;
