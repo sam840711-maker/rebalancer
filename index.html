@@ -411,7 +411,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 var C={mint:"#4ade80",coral:"#fb7185",gold:"#f5b942",blue:"#609cf6",
   txt:"#e9efea",txt2:"#8b968f",txt3:"#5e6a63",line:"#262b27",bg3:"#1b201d"};
 var SLICE=["#4ade80","#609cf6","#f5b942","#fb7185","#a78bfa","#22d3ee"];
-var APP_VER="v0.9e";   // 빌드 버전 (하단 표시)
+var APP_VER="v0.9g";   // 빌드 버전 (하단 표시)
 function uid(){return Math.random().toString(36).slice(2,9);}
 function won(n){return Math.round(n||0).toLocaleString("ko-KR");}
 function pct(n){return (n>=0?"+":"")+(n*100).toFixed(2)+"%";}
@@ -449,10 +449,11 @@ function modal(opts){
     +'</div></div>';
   ov.className="modal show";
   modal._onOk=opts.onOk||function(){};
+  modal._onCancel=opts.onCancel||null;
   var inp=ov.querySelector("[data-minput]");
   if(inp)setTimeout(function(){try{inp.focus();inp.select();}catch(e){}},60);
 }
-function closeModal(){var ov=el("modal");ov.className="modal";ov.innerHTML="";}
+function closeModal(){var ov=el("modal");ov.className="modal";ov.innerHTML="";modal._onCancel=null;}
 function confirmModal(title,text,onOk,danger,okText){
   modal({title:title,body:'<p class="mtext">'+esc(text)+'</p>',
     okText:okText||"확인",danger:danger,onOk:function(){onOk();}});
@@ -480,7 +481,7 @@ el("modal").addEventListener("click",function(e){
   var b=e.target.closest("[data-m]");
   if(!b){if(e.target.id==="modal")closeModal();return;}
   var act=b.getAttribute("data-m");
-  if(act==="cancel"){closeModal();return;}
+  if(act==="cancel"){var cc=modal._onCancel;closeModal();if(cc)cc();return;}
   if(act==="ok"){
     var inp=el("modal").querySelector("[data-minput]");
     var val=inp?inp.value:null;
@@ -1546,8 +1547,13 @@ function renderInner(){
   var acc=activeAcc();
   if(!acc&&state.accounts.length){ui.accId=state.accounts[0].id;acc=state.accounts[0];}
   if(!acc){
-    html='<div class="empty fade">아직 계좌가 없습니다.<br>'
-      +'<button class="btn" data-act="add-acc" style="margin-top:16px">+ 계좌 만들기</button></div>';
+    html='<div class="empty fade" style="line-height:1.7">'
+      +'<div style="font-size:15px;color:var(--txt);font-weight:600;margin-bottom:6px">데이터가 없습니다</div>'
+      +'<div class="note" style="margin-bottom:20px">이전에 백업한 적이 있다면 복원하세요.<br>새 기기·재설치 후라면 Google 복원이 가장 편합니다.</div>'
+      +'<button class="btn" data-act="gd-restore" style="display:block;width:100%;max-width:280px;margin:0 auto 10px">☁ Google에서 복원</button>'
+      +'<button class="ghost" data-act="import" style="display:block;width:100%;max-width:280px;margin:0 auto 10px">⤓ 백업 파일(.json)에서 복원</button>'
+      +'<button class="ghost" data-act="add-acc" style="display:block;width:100%;max-width:280px;margin:0 auto">+ 새 계좌 만들기</button>'
+      +'</div>';
   }else{
     var st=function(k,label){return '<button class="subtab'+(ui.tab===k?" on":"")
       +'" data-act="tab" data-tab="'+k+'"'+(ui.editPort?" disabled":"")+'>'+label+'</button>';};
@@ -1567,6 +1573,18 @@ function softRefresh(){
 }
 
 /* ===================== 이벤트 ===================== */
+/* 빈 데이터 또는 예시 계좌만 있는 상태 — 클라우드 자동 백업으로 덮어쓰면 안 되는 상태 */
+function isTrivialState(){
+  if(!state||!Array.isArray(state.accounts))return true;
+  if(state.accounts.length===0)return true;
+  /* 예시 계좌(이름이 "예시 계좌", 또는 예시 종목코드 000001/000002만)뿐이면 trivial */
+  return state.accounts.every(function(a){
+    if(a.name==="예시 계좌")return true;
+    var codes=(a.holdings||[]).map(function(h){return String(h.code||"").trim();});
+    if(!codes.length)return true;
+    return codes.every(function(c){return c==="000001"||c==="000002"||c==="";});
+  });
+}
 function patch(fn){fn();save();}
 var undoState=null;   // 복원 직전 상태 스냅샷 (되돌리기용)
 function undoRebalance(){
@@ -1721,6 +1739,9 @@ function gdBackupNow(silent){
   if(GD.backingUp)return Promise.resolve(false);
   if(!gdOnline()){if(!silent)toast("오프라인 — 인터넷 연결 후 백업됩니다.");return Promise.resolve(false);}
   if(silent&&!gdConnected())return Promise.resolve(false);   // 무음 백업은 살아있는 토큰 있을 때만
+  /* 빈/예시 데이터는 클라우드를 덮어쓰지 않음 (자동 백업 한정).
+     수동 "지금 백업"은 사용자가 의도한 것이므로 허용. */
+  if(silent&&isTrivialState()){return Promise.resolve(false);}
   var json;try{json=JSON.stringify(state);}catch(e){if(!silent)toast("백업 데이터를 만들 수 없습니다.");return Promise.resolve(false);}
   GD.backingUp=true;if(el("gdState"))render();
   var getTok=silent?gdGetToken(false):gdGetTokenSmart();
@@ -1748,15 +1769,34 @@ function maybeAutoBackup(){
 }
 /* 복원 — latest.json 읽어 선택 복원 모달로 */
 function gdRestore(){
-  if(!gdLinked()){gdConnect();return;}
   if(!gdOnline()){toast("오프라인 — 인터넷 연결 후 복원하세요.");return;}
-  toast("드라이브에서 백업을 불러오는 중…");
-  gdGetTokenSmart().then(function(){return gdDownload("latest.json");})
-    .then(function(txt){
-      var data=JSON.parse(txt);
-      if(!data||!Array.isArray(data.accounts))throw new Error("백업 형식 오류");
-      openRestoreModal(consolidate(data));
-    }).catch(function(e){toast("복원 실패: "+(e&&e.message||"오류"));});
+  toast("Google 드라이브에서 백업을 불러오는 중…");
+  /* 미연결(재설치 등)이어도 토큰을 받아 바로 복원까지 진행 — 동의창 한 번이면 끝 */
+  gdGetTokenSmart().then(function(){
+    /* 복원 시도 시점에 연결 상태로 표시 */
+    GD.linked=true;
+    try{localStorage.setItem(GD_KEYS.linked,"1");localStorage.setItem(GD_KEYS.auto,"1");}catch(e){}
+    return gdDownload("latest.json");
+  }).then(function(txt){
+    var data=JSON.parse(txt);
+    if(!data||!Array.isArray(data.accounts))throw new Error("백업 형식 오류");
+    render();
+    var cons=consolidate(data);
+    /* 드라이브 백업이 예시/빈 데이터로 보이면 경고 후 진행 여부 확인 */
+    var savedState=state;state=cons;var trivial=isTrivialState();state=savedState;
+    if(trivial){
+      confirmModal("백업이 비어 있음",
+        "드라이브의 백업이 예시 데이터이거나 비어 있습니다. 그래도 복원 화면을 열까요?",
+        function(){openRestoreModal(cons);},false,"열기");
+      return;
+    }
+    openRestoreModal(cons);
+  }).catch(function(e){
+    render();
+    var msg=(e&&e.message)||"오류";
+    if(msg.indexOf("백업 파일이 없습니다")>=0)toast("드라이브에 백업이 없습니다. 먼저 백업하세요.");
+    else toast("복원 실패: "+msg);
+  });
 }
 /* 자동 백업 디바운스 (데이터 변경 후 60초) — 토큰 살아있을 때만 실제 업로드 */
 var gdAutoTimer=null;
@@ -2046,7 +2086,13 @@ function setCcyToggle(wrap,val){
     try{shareBackup();}catch(e){toast("백업을 열 수 없습니다.");}
   });
   var tr=el("topRestore");
-  if(tr)tr.addEventListener("click",function(){el("importer").click();});
+  if(tr)tr.addEventListener("click",function(){
+    modal({title:"백업 복원",
+      body:'<p class="mtext" style="line-height:1.7;margin-bottom:4px">어디에서 복원할까요?</p>',
+      okText:"☁ Google 드라이브",cancelText:"⤓ 파일(.json)",
+      onOk:function(){gdRestore();},
+      onCancel:function(){el("importer").click();}});
+  });
   var fc=el("fxChip");
   if(fc)fc.addEventListener("click",function(){
     if(ui.fxFetching)return;
@@ -2180,7 +2226,8 @@ function applyRestore(backup,ids){
 }
 
 /* ===================== 시작 ===================== */
-state=consolidate(load()||seed());
+var loaded=load();
+state=consolidate(loaded||{accounts:[]});   // 데이터 없으면 빈 상태 (예시 자동 생성 안 함)
 gdLoadCfg();
 if(el("appVer"))el("appVer").textContent=APP_VER;
 render();
