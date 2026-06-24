@@ -393,6 +393,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
     <span class="tagline">적립식 리밸런싱 포트폴리오 관리</span>
     <span class="topbtns">
       <button class="fxchip" id="fxChip" title="환율 갱신"><span class="fxlbl">환율</span> <span id="fxVal">—</span> <span class="fxsym">USD/KRW</span></button>
+      <button class="backupbtn" id="topRefresh" title="시세 갱신">↻ 시세</button>
       <button class="backupbtn" id="topBackup" title="백업 저장">⤒ 백업</button>
       <button class="backupbtn" id="topRestore" title="백업 복원">⤓ 복원</button>
     </span>
@@ -411,7 +412,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 var C={mint:"#4ade80",coral:"#fb7185",gold:"#f5b942",blue:"#609cf6",
   txt:"#e9efea",txt2:"#8b968f",txt3:"#5e6a63",line:"#262b27",bg3:"#1b201d"};
 var SLICE=["#4ade80","#609cf6","#f5b942","#fb7185","#a78bfa","#22d3ee"];
-var APP_VER="v0.9g";   // 빌드 버전 (하단 표시)
+var APP_VER="v0.9i";   // 빌드 버전 (하단 표시)
 function uid(){return Math.random().toString(36).slice(2,9);}
 function won(n){return Math.round(n||0).toLocaleString("ko-KR");}
 function pct(n){return (n>=0?"+":"")+(n*100).toFixed(2)+"%";}
@@ -796,7 +797,8 @@ function yahooSymbols(code){
   if(/^\d{4,6}$/.test(code)) return [code+".KS",code+".KQ"];
   return [code];
 }
-function isKRCode(code){return /^\d{4,6}$/.test(String(code||"").trim());}
+function krDigits(code){var m=String(code||"").trim().match(/^(\d{4,6})(\.(KS|KQ))?$/i);return m?m[1]:null;}
+function isKRCode(code){return krDigits(code)!=null;}
 /* 어떤 Promise든 ms 후 강제 reject — 프록시가 hang 돼도 갱신이 멈추지 않게 */
 function withTimeout(p,ms){
   return new Promise(function(resolve,reject){
@@ -895,13 +897,22 @@ function refreshFx(silent){
 }
 /* 모든 계좌의 고유 종목코드 시세를 한 번에 갱신 */
 function refreshPrices(silent){
-  if(ui.fetching) return;
+  if(ui.fetching){
+    if(!silent)ui.fetchWantToast=true;   // 진행 중인 갱신이 끝나면 결과 토스트 보여주기
+    return;
+  }
   if(!state||!Array.isArray(state.accounts)) return;
+  if(!silent)ui.fetchWantToast=true;
   var codes={};
   state.accounts.forEach(function(a){
     a.holdings.forEach(function(h){if(h.code&&String(h.code).trim())codes[h.code]=1;});
   });
   var list=Object.keys(codes);
+  if(!list.length){
+    ui.fetchWantToast=false;
+    if(!silent)toast("보유 종목이 없습니다. 종목을 먼저 추가하세요.");
+    return;
+  }
   ui.fetching=true; render();
   var ok=0,srcN=0,srcY=0;
   var jobs=list.map(function(code){
@@ -924,9 +935,10 @@ function refreshPrices(silent){
       });
     });
     save();render();
-    if(!silent){
+    var showToast=ui.fetchWantToast;ui.fetchWantToast=false;
+    if(showToast){
       if(list.length&&ok===0) toast("시세를 가져오지 못했습니다. 시세 설정의 프록시를 확인해 주세요.");
-      else if(ok<list.length) toast("일부 시세만 갱신됨 ("+ok+"/"+list.length+") — 종목코드 확인");
+      else if(ok<list.length) toast("일부만 갱신됨 ("+ok+"/"+list.length+") · 국장 네이버 "+srcN+"/야후 "+srcY);
       else toast("시세 갱신 완료 · 국장 네이버 "+srcN+"/야후 "+srcY);
     }
   });
@@ -1148,10 +1160,8 @@ function viewPort(acc){
     :'<div style="text-align:right;margin:2px 0 4px">'
       +'<button class="ghost" data-act="edit-port">✎ 수정</button></div>';
   var holdRight=ed
-    ?'<button class="ghost" data-act="refresh-prices"'+(ui.fetching?" disabled":"")
-      +'>'+(ui.fetching?"갱신 중…":"↻ 시세")+'</button> <button class="ghost" data-act="add-h">+ 종목</button>'
-    :'<button class="ghost" data-act="refresh-prices"'+(ui.fetching?" disabled":"")
-      +'>'+(ui.fetching?"갱신 중…":"↻ 시세")+'</button>';
+    ?'<button class="ghost" data-act="add-h">+ 종목</button>'
+    :'';
   return '<div class="fade">'
     +(undoState?'<div style="text-align:center;margin:2px 0 8px">'
       +'<button class="linkbtn" data-act="undo-rebal">↩ 직전 상태로 되돌리기</button></div>':"")
@@ -1530,9 +1540,13 @@ function render(){
 }
 function renderInner(){
   buildPills();
-  var tb=el("topBackup"),tr=el("topRestore"),fc=el("fxChip"),fv=el("fxVal");
+  var tb=el("topBackup"),tr=el("topRestore"),fc=el("fxChip"),fv=el("fxVal"),trf=el("topRefresh");
   if(tb)tb.disabled=ui.editPort;
   if(tr)tr.disabled=ui.editPort;
+  if(trf){
+    trf.disabled=ui.editPort||!!ui.fetching;
+    trf.textContent=ui.fetching?"갱신 중…":"↻ 시세";
+  }
   if(fv){
     var r=fx();
     fv.textContent=r.toLocaleString("ko-KR",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -2093,6 +2107,8 @@ function setCcyToggle(wrap,val){
       onOk:function(){gdRestore();},
       onCancel:function(){el("importer").click();}});
   });
+  var trf=el("topRefresh");
+  if(trf)trf.addEventListener("click",function(){refreshPrices(false);});
   var fc=el("fxChip");
   if(fc)fc.addEventListener("click",function(){
     if(ui.fxFetching)return;
