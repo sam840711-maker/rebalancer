@@ -411,7 +411,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 var C={mint:"#4ade80",coral:"#fb7185",gold:"#f5b942",blue:"#609cf6",
   txt:"#e9efea",txt2:"#8b968f",txt3:"#5e6a63",line:"#262b27",bg3:"#1b201d"};
 var SLICE=["#4ade80","#609cf6","#f5b942","#fb7185","#a78bfa","#22d3ee"];
-var APP_VER="v0.9c";   // 빌드 버전 (하단 표시)
+var APP_VER="v0.9d";   // 빌드 버전 (하단 표시)
 function uid(){return Math.random().toString(36).slice(2,9);}
 function won(n){return Math.round(n||0).toLocaleString("ko-KR");}
 function pct(n){return (n>=0?"+":"")+(n*100).toFixed(2)+"%";}
@@ -752,7 +752,9 @@ var WORKER_CODE='export default {\n'
   +'    if (req.method === "OPTIONS") return new Response(null, { headers: cors });\n'
   +'    const t = new URL(req.url).searchParams.get("url");\n'
   +'    if (!t) return new Response("missing url", { status: 400, headers: cors });\n'
-  +'    const r = await fetch(t, { headers: { "User-Agent": "Mozilla/5.0" } });\n'
+  +'    const h = { "User-Agent": "Mozilla/5.0" };\n'
+  +'    if (t.includes("naver.com")) h["Referer"] = "https://finance.naver.com/";\n'
+  +'    const r = await fetch(t, { headers: h });\n'
   +'    return new Response(r.body, { status: r.status, headers: { ...cors, "Content-Type": "application/json" } });\n'
   +'  }\n'
   +'};';
@@ -793,6 +795,32 @@ function yahooSymbols(code){
   if(/^\d{4,6}$/.test(code)) return [code+".KS",code+".KQ"];
   return [code];
 }
+function isKRCode(code){return /^\d{4,6}$/.test(String(code||"").trim());}
+/* === 네이버 금융 — 국장(코스피·코스닥) 실시간 시세 (야후는 ~20분 지연) ===
+   응답 형식 변동에 대비해 여러 필드명을 방어적으로 파싱. 코드는 6자리 숫자. */
+function _naverNum(v){
+  if(v==null)return null;
+  if(typeof v==="number")return v;
+  var n=parseFloat(String(v).replace(/[,\s]/g,""));
+  return isNaN(n)?null:n;
+}
+function fetchNaverKR(code){
+  var c=String(code).replace(/\D/g,"");
+  while(c.length<6)c="0"+c;
+  if(c.length!==6)return Promise.reject(new Error("bad KR code"));
+  var url="https://polling.finance.naver.com/api/realtime/domestic/stock/"+c+"?t="+Date.now();
+  return proxyFetchJson(url).then(function(data){
+    var d=(data&&data.datas&&data.datas[0])
+      ||(data&&data.result&&data.result.areas&&data.result.areas[0]&&data.result.areas[0].datas&&data.result.areas[0].datas[0])
+      ||(data&&data.result&&data.result[0])
+      ||data;
+    if(!d)throw new Error("naver no data");
+    var price=_naverNum(d.closePrice!=null?d.closePrice:(d.nv!=null?d.nv:(d.now!=null?d.now:(d.currentPrice!=null?d.currentPrice:d.tradePrice))));
+    if(price==null||price<=0)throw new Error("naver no price");
+    var name=d.stockName||d.nm||d.itemname||"";
+    return {price:price,currency:"KRW",name:name,_src:"naver"};
+  });
+}
 function fetchYahooInfo(symbol){
   var url="https://query1.finance.yahoo.com/v8/finance/chart/"+encodeURIComponent(symbol)
     +"?interval=1d&range=1d&t="+Date.now();
@@ -803,13 +831,22 @@ function fetchYahooInfo(symbol){
     return {
       price:m.regularMarketPrice,
       currency:(m.currency||"").toUpperCase()||null,   // 'USD' | 'KRW' | ...
-      name:m.longName||m.shortName||""
+      name:m.longName||m.shortName||"",
+      _src:"yahoo"
     };
   });
 }
 function fetchYahooPrice(symbol){return fetchYahooInfo(symbol).then(function(d){return d.price;});}
+/* 종목코드 → 시세·통화·이름. 국장(6자리)은 네이버 우선 → 야후(.KS/.KQ) 폴백. 그 외는 야후. */
 function fetchCodeInfo(code){
-  var cands=yahooSymbols(code),i=0,found=null;
+  if(isKRCode(code)){
+    return fetchNaverKR(code).then(function(d){d.symbol=String(code).trim();return d;})
+      .catch(function(){return fetchYahooHybrid(code);});   // 네이버 실패 → 야후
+  }
+  return fetchYahooHybrid(code);
+}
+function fetchYahooHybrid(code){
+  var cands=yahooSymbols(code),i=0;
   function step(){
     if(i>=cands.length) return Promise.reject(new Error("not found"));
     var s=cands[i++];
@@ -818,12 +855,7 @@ function fetchCodeInfo(code){
   return step();
 }
 function fetchCodePrice(code){
-  var cands=yahooSymbols(code),i=0;
-  function step(){
-    if(i>=cands.length) return Promise.reject(new Error("not found"));
-    return fetchYahooPrice(cands[i++]).catch(function(){return step();});
-  }
-  return step();
+  return fetchCodeInfo(code).then(function(d){return d.price;});
 }
 /* USD/KRW 환율 자동 갱신 — Frankfurter → er-api → Yahoo KRW=X 폴백 */
 function refreshFx(silent){
@@ -861,10 +893,11 @@ function refreshPrices(silent){
   });
   var list=Object.keys(codes);
   ui.fetching=true; render();
-  var ok=0;
+  var ok=0,srcN=0,srcY=0;
   var jobs=list.map(function(code){
     return fetchCodeInfo(code).then(function(d){
-      if(d.price>0){state.prices[code]=d.price;ok++;}
+      if(d.price>0){state.prices[code]=d.price;ok++;
+        if(d._src==="naver")srcN++;else if(d._src==="yahoo")srcY++;}
       if(d.currency==="USD"||d.currency==="KRW")state.priceCcy[code]=d.currency;
     }).catch(function(){});
   });
@@ -884,6 +917,7 @@ function refreshPrices(silent){
     if(!silent){
       if(list.length&&ok===0) toast("시세를 가져오지 못했습니다. 시세 설정의 프록시를 확인해 주세요.");
       else if(ok<list.length) toast("일부 시세만 갱신됨 ("+ok+"/"+list.length+") — 종목코드 확인");
+      else toast("시세 갱신 완료 · 국장 네이버 "+srcN+"/야후 "+srcY);
     }
   });
 }
