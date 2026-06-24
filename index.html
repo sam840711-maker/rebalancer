@@ -412,7 +412,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 var C={mint:"#4ade80",coral:"#fb7185",gold:"#f5b942",blue:"#609cf6",
   txt:"#e9efea",txt2:"#8b968f",txt3:"#5e6a63",line:"#262b27",bg3:"#1b201d"};
 var SLICE=["#4ade80","#609cf6","#f5b942","#fb7185","#a78bfa","#22d3ee"];
-var APP_VER="v0.9i";   // 빌드 버전 (하단 표시)
+var APP_VER="v0.9j";   // 빌드 버전 (하단 표시)
 function uid(){return Math.random().toString(36).slice(2,9);}
 function won(n){return Math.round(n||0).toLocaleString("ko-KR");}
 function pct(n){return (n>=0?"+":"")+(n*100).toFixed(2)+"%";}
@@ -477,6 +477,12 @@ el("modal").addEventListener("click",function(e){
     return;
   }
   if(e.target.closest("[data-mlookup]")){e.preventDefault();modalLookup();return;}
+  if(e.target.closest('[data-act="use-suggested-proxy"]')){
+    e.preventDefault();
+    var pin=el("modal").querySelector('[data-mfield="purl"]');
+    if(pin){pin.value=SUGGESTED_PROXY;try{pin.focus();}catch(e2){}}
+    return;
+  }
   var ccyBtn=e.target.closest(".ccytoggle button[data-ccy]");
   if(ccyBtn){e.preventDefault();setCcyToggle(ccyBtn.parentElement,ccyBtn.getAttribute("data-ccy"));return;}
   var b=e.target.closest("[data-m]");
@@ -896,6 +902,24 @@ function refreshFx(silent){
     });
 }
 /* 모든 계좌의 고유 종목코드 시세를 한 번에 갱신 */
+var SUGGESTED_PROXY="https://sh-proxy.sam840711.workers.dev";
+/* 시세 전체 실패 시 — 프록시(Cloudflare Worker) 주소를 바로 넣게 안내 */
+function openProxyHelp(){
+  var cur=state.proxyUrl||"";
+  modal({title:"시세를 가져오지 못했습니다",
+    body:'<p class="mtext" style="line-height:1.7">공개 프록시가 네이버·야후를 막고 있는 것 같습니다. '
+      +'안정적으로 쓰려면 본인 <b>Cloudflare Worker</b> 주소를 넣으세요. '
+      +'자산관리 앱(SH Portfolio 등)에서 쓰던 Worker가 있으면 같은 주소를 그대로 넣으면 됩니다.</p>'
+      +'<div class="fl" style="margin-top:10px">Worker 주소</div>'
+      +'<input class="minput-f" data-minput data-mfield="purl" placeholder="'+esc(SUGGESTED_PROXY)+'" value="'+esc(cur)+'">'
+      +'<div style="margin-top:8px"><button class="linkbtn" data-act="use-suggested-proxy">'+esc(SUGGESTED_PROXY)+' 사용</button></div>',
+    okText:"저장 후 다시 시도",cancelText:"닫기",
+    onOk:function(val,fields){
+      var u=(fields.purl||val||"").trim();
+      state.proxyUrl=u;save();
+      if(u)setTimeout(function(){refreshPrices(false);},200);
+    }});
+}
 function refreshPrices(silent){
   if(ui.fetching){
     if(!silent)ui.fetchWantToast=true;   // 진행 중인 갱신이 끝나면 결과 토스트 보여주기
@@ -937,7 +961,7 @@ function refreshPrices(silent){
     save();render();
     var showToast=ui.fetchWantToast;ui.fetchWantToast=false;
     if(showToast){
-      if(list.length&&ok===0) toast("시세를 가져오지 못했습니다. 시세 설정의 프록시를 확인해 주세요.");
+      if(list.length&&ok===0) openProxyHelp();
       else if(ok<list.length) toast("일부만 갱신됨 ("+ok+"/"+list.length+") · 국장 네이버 "+srcN+"/야후 "+srcY);
       else toast("시세 갱신 완료 · 국장 네이버 "+srcN+"/야후 "+srcY);
     }
