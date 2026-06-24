@@ -136,6 +136,13 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 .gdtxt{font-size:11.5px;color:var(--txt3);font-weight:600;}
 .gdbtns{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px;}
 .gdpicklist{display:flex;flex-direction:column;gap:7px;max-height:50vh;overflow-y:auto;}
+.settings .setsec{margin-top:16px;background:var(--bg2);border:1px solid var(--line);
+  border-radius:13px;padding:15px 16px;}
+.settings .setsec-t{font-size:13px;font-weight:700;color:var(--txt);margin-bottom:11px;
+  letter-spacing:.01em;}
+.settings .setsec.danger{border-color:rgba(248,113,113,.25);}
+.settings .setsec.danger .setsec-t{color:var(--coral);}
+.settings .setrow{display:flex;gap:8px;flex-wrap:wrap;}
 .gdpick{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;
   text-align:left;background:var(--bg3);border:1px solid var(--line);border-radius:10px;
   padding:12px 14px;color:var(--txt);font-size:13.5px;font-weight:600;cursor:pointer;
@@ -414,8 +421,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
     <span class="topbtns">
       <button class="fxchip" id="fxChip" title="환율 갱신"><span class="fxlbl">환율</span> <span id="fxVal">—</span> <span class="fxsym">USD/KRW</span></button>
       <button class="backupbtn" id="topRefresh" title="시세 갱신">↻ 시세</button>
-      <button class="backupbtn" id="topBackup" title="백업 저장">⤒ 백업</button>
-      <button class="backupbtn" id="topRestore" title="백업 복원">⤓ 복원</button>
+      <button class="backupbtn" id="topSettings" title="설정">⚙ 설정</button>
     </span>
   </div>
   <div class="pills" id="pills"></div>
@@ -432,7 +438,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 var C={mint:"#4ade80",coral:"#fb7185",gold:"#f5b942",blue:"#609cf6",
   txt:"#e9efea",txt2:"#8b968f",txt3:"#5e6a63",line:"#262b27",bg3:"#1b201d"};
 var SLICE=["#4ade80","#609cf6","#f5b942","#fb7185","#a78bfa","#22d3ee"];
-var APP_VER="v0.9m";   // 빌드 버전 (하단 표시)
+var APP_VER="v0.10";   // 빌드 버전 (하단 표시)
 function uid(){return Math.random().toString(36).slice(2,9);}
 function won(n){return Math.round(n||0).toLocaleString("ko-KR");}
 function pct(n){return (n>=0?"+":"")+(n*100).toFixed(2)+"%";}
@@ -1232,9 +1238,8 @@ function viewPort(acc){
     +(ed?brokerLine(acc)+(ui.showBrokers?brokerPanel(acc):""):"")
     +cashCardHTML(acc)
     +'<div class="note" style="margin-top:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">'
-      +'<span>마지막 시세 갱신: '+fmtTime(state.lastFetch)+staleWarn+' · Yahoo Finance</span>'
-      +(ed?'<button class="linkbtn" data-act="toggle-proxy">⚙ 시세 설정</button>':"")+'</div>'
-    +(ed&&ui.showProxy?proxyPanel():"")
+      +'<span>마지막 시세 갱신: '+fmtTime(state.lastFetch)+staleWarn+' · 국장 네이버/해외 야후</span>'
+      +(ed?'<button class="linkbtn" data-act="go-settings">⚙ 시세 설정</button>':"")+'</div>'
     +'</div>';
 }
 function brokerLine(acc){
@@ -1507,19 +1512,8 @@ function softContrib(acc){
 }
 
 /* ---- 공통 푸터 ---- */
-function foot(){
-  var bk;
-  if(state.lastBackup){
-    var days=Math.floor((Date.now()-state.lastBackup)/86400000);
-    var txt=days<=0?"오늘":days+"일 전";
-    bk='<span class="note" style="align-self:center;color:'
-      +(days>=30?C.coral:C.txt3)+'">마지막 백업: '+txt
-      +(days>=30?" · 백업을 권장합니다":"")+'</span>';
-  }else{
-    bk='<span class="note" style="align-self:center;color:'+C.gold
-      +'">아직 백업한 적 없음 · 백업을 권장합니다</span>';
-  }
-  /* Google 자동 백업 카드 */
+/* ===================== 설정 페이지 (통합) ===================== */
+function gdStatusBlock(){
   var gstatus,gbtns;
   if(gdLinked()){
     var dotCls="gddot on",cloudTxt;
@@ -1541,23 +1535,73 @@ function foot(){
     gstatus='<span class="gddot"></span><span class="gdtxt" id="gdState">연결 안 됨</span>';
     gbtns='<button class="btn sm" data-act="gd-connect">Google 계정 연결</button>';
   }
-  var gcard='<div class="gdcard">'
+  return '<div class="gdcard">'
     +'<div class="gdhead"><span class="gdtitle">☁ Google 드라이브 자동 백업</span>'+gstatus+'</div>'
     +'<div class="gdbtns">'+gbtns+'</div>'
     +'<p class="note" style="margin-top:8px;line-height:1.65">연결하면 데이터 변경 시 자동으로 '
     +'<b style="color:var(--txt2)">본인 드라이브의 앱 전용 폴더</b>에 전체 계좌가 한 번에 백업됩니다. '
-    +'새 기기에서도 연결 후 <b style="color:var(--mint)">복원</b> 한 번이면 됩니다.'
+    +'복원 시 <b style="color:var(--mint)">백업 시점</b>을 골라 되돌릴 수 있습니다.'
     +(gdLinked()?"":' <button class="linkbtn" data-act="gd-setup" style="font-size:11px">다른 클라이언트 ID 사용</button>')
-    +'</p>'
+    +'</p></div>';
+}
+function viewSettings(){
+  var bk;
+  if(state.lastBackup){
+    var days=Math.floor((Date.now()-state.lastBackup)/86400000);
+    var txt=days<=0?"오늘":days+"일 전";
+    bk='마지막 백업: '+txt+(days>=30?" · 백업을 권장합니다":"");
+  }else bk="아직 백업한 적 없음 · 백업을 권장합니다";
+
+  var html='<div class="fade settings">'
+    +bar("설정");
+
+  /* 1) 클라우드 백업 */
+  html+='<div class="setsec"><div class="setsec-t">클라우드 백업</div>'
+    +gdStatusBlock()
+    +'<p class="note" style="margin-top:10px;color:'+( (state.lastBackup&&(Date.now()-state.lastBackup)/86400000>=30)||!state.lastBackup ?C.gold:C.txt3)+'">'+esc(bk)+'</p>'
     +'</div>';
-  return '<div class="foot">'
-    +'<button class="ghost" data-act="reset">초기 데이터로 재설정</button>'
-    +'<div style="flex:1"></div>'
-    +bk+'</div>'
-    +gcard
-    +'<p class="note" style="margin-top:10px;line-height:1.75">'
-    +'파일로 직접 백업·복원하려면 화면 맨 위 <b style="color:var(--mint)">⤒ 백업</b> · '
-    +'<b style="color:var(--mint)">⤓ 복원</b> 버튼을 사용하세요.</p>';
+
+  /* 2) 파일 백업/복원 */
+  html+='<div class="setsec"><div class="setsec-t">파일 백업 / 복원</div>'
+    +'<div class="setrow">'
+    +'<button class="ghost sm" data-act="export">⤒ 파일로 백업 (.json)</button>'
+    +'<button class="ghost sm" data-act="import">⤓ 파일에서 복원</button>'
+    +'</div>'
+    +'<p class="note" style="margin-top:8px;line-height:1.6">기기에 직접 저장하거나, 저장해 둔 백업 파일에서 계좌를 되돌립니다.</p>'
+    +'</div>';
+
+  /* 3) 시세·프록시 */
+  html+='<div class="setsec"><div class="setsec-t">시세 가져오기</div>'
+    +'<div class="lbl">Cloudflare Worker 프록시 주소 (선택)</div>'
+    +'<input class="input t" data-edit="proxyurl" value="'+esc(state.proxyUrl||"")+'" placeholder="https://이름.workers.dev" style="width:100%;max-width:360px">'
+    +'<p class="note" style="margin-top:8px;line-height:1.7">국장 시세는 네이버, 미국 종목은 야후에서 가져옵니다. 비워두면 공개 프록시를 쓰는데 가끔 느리거나 막힙니다. 안정적으로 쓰려면 무료 Cloudflare Worker 주소를 넣으세요. 자산관리 앱용 Worker가 있으면 같은 주소를 그대로 넣으면 됩니다.</p>'
+    +'<div class="codebox-wrap"><button class="linkbtn" data-act="copy-worker" style="float:right">코드 복사</button>'
+    +'<div class="lbl" style="margin-bottom:6px">Worker 코드 (Cloudflare 에 붙여넣고 Deploy)</div>'
+    +'<pre class="codebox">'+esc(WORKER_CODE)+'</pre></div>'
+    +'</div>';
+
+  /* 4) 위험 구역 */
+  html+='<div class="setsec danger"><div class="setsec-t">초기화</div>'
+    +'<button class="ghost sm" data-act="reset">모든 데이터 삭제</button>'
+    +'<p class="note" style="margin-top:8px;line-height:1.6">이 기기의 모든 계좌·입금 내역을 지웁니다. 클라우드 백업은 남아 있어 복원할 수 있습니다.</p>'
+    +'</div>';
+
+  html+='</div>';
+  return html;
+}
+function foot(){
+  var bk;
+  if(state.lastBackup){
+    var days=Math.floor((Date.now()-state.lastBackup)/86400000);
+    var txt=days<=0?"오늘":days+"일 전";
+    bk='<span class="note" style="color:'+(days>=30?C.gold:C.txt3)+'">마지막 백업: '+txt
+      +(days>=30?" · 백업을 권장합니다":"")+'</span>';
+  }else{
+    bk='<span class="note" style="color:'+C.gold+'">아직 백업한 적 없음</span>';
+  }
+  return '<div class="foot" style="align-items:center">'
+    +bk+'<div style="flex:1"></div>'
+    +'<button class="ghost sm" data-act="go-settings">⚙ 백업·설정</button></div>';
 }
 
 /* ===================== 메인 렌더 ===================== */
@@ -1589,15 +1633,14 @@ function render(){
         +'<span class="note">'+esc(String(err&&err.message||err))+'</span><br>'
         +'<button class="btn" data-act="share-backup" style="margin-top:16px">백업 공유 (드라이브)</button>'
         +'<button class="ghost" data-act="export" style="margin-top:8px">백업 저장 (.json)</button>'
-        +'<button class="ghost" data-act="reset" style="margin-top:8px">초기 데이터로 재설정</button></div>';
+        +'<button class="ghost" data-act="reset" style="margin-top:8px">모든 데이터 삭제</button></div>';
     }catch(e2){}
   }
 }
 function renderInner(){
   buildPills();
-  var tb=el("topBackup"),tr=el("topRestore"),fc=el("fxChip"),fv=el("fxVal"),trf=el("topRefresh");
-  if(tb)tb.disabled=ui.editPort;
-  if(tr)tr.disabled=ui.editPort;
+  var ts=el("topSettings"),fc=el("fxChip"),fv=el("fxVal"),trf=el("topRefresh");
+  if(ts)ts.disabled=ui.editPort;
   if(trf){
     trf.disabled=ui.editPort||!!ui.fetching;
     trf.textContent=ui.fetching?"갱신 중…":"↻ 시세";
@@ -1615,6 +1658,13 @@ function renderInner(){
   var app=el("app"),html="";
   var acc=activeAcc();
   if(!acc&&state.accounts.length){ui.accId=state.accounts[0].id;acc=state.accounts[0];}
+  var st=function(k,label){return '<button class="subtab'+(ui.tab===k?" on":"")
+    +'" data-act="tab" data-tab="'+k+'"'+(ui.editPort?" disabled":"")+'>'+label+'</button>';};
+  if(ui.tab==="settings"){
+    html='<div class="subtabs">'+st("port","포트폴리오")+st("rebal","리밸런싱")+st("contrib","입금 내역")+'</div>';
+    html+=viewSettings();
+    app.innerHTML=html;syncNav();return;
+  }
   if(!acc){
     html='<div class="empty fade" style="line-height:1.7">'
       +'<div style="font-size:15px;color:var(--txt);font-weight:600;margin-bottom:6px">데이터가 없습니다</div>'
@@ -1624,8 +1674,6 @@ function renderInner(){
       +'<button class="ghost" data-act="add-acc" style="display:block;width:100%;max-width:280px;margin:0 auto">+ 새 계좌 만들기</button>'
       +'</div>';
   }else{
-    var st=function(k,label){return '<button class="subtab'+(ui.tab===k?" on":"")
-      +'" data-act="tab" data-tab="'+k+'"'+(ui.editPort?" disabled":"")+'>'+label+'</button>';};
     html='<div class="subtabs">'+st("port","포트폴리오")+st("rebal","리밸런싱")+st("contrib","입금 내역")+'</div>';
     if(ui.tab==="port")html+=viewPort(acc);
     else if(ui.tab==="rebal")html+=viewRebal(acc);
@@ -2003,6 +2051,7 @@ el("app").addEventListener("click",function(e){
   var act=t.getAttribute("data-act");
   var acc=activeAcc();
   if(act==="tab"){if(ui.editPort)return;ui.tab=t.getAttribute("data-tab");render();}
+  else if(act==="go-settings"){ui.tab="settings";render();}
   else if(act==="edit-port"){
     ui.editPort=true;editSnapshot=JSON.parse(JSON.stringify(state));render();}
   else if(act==="save-port"){
@@ -2116,9 +2165,9 @@ el("app").addEventListener("click",function(e){
   }
   else if(act==="gd-setup"){gdOpenSetup();}
   else if(act==="reset"){
-    confirmModal("초기화","모든 데이터를 초기 상태로 되돌릴까요? 현재 데이터가 사라집니다.",function(){
-      state=consolidate(seed());undoState=null;save();ui.accId=null;ui.showBrokers=false;render();toast("초기 데이터로 재설정했습니다.");
-    },true,"초기화");}
+    confirmModal("모든 데이터 삭제","이 기기의 모든 계좌·입금 내역을 삭제할까요? 클라우드 백업은 남아 있어 복원할 수 있습니다.",function(){
+      state=consolidate({accounts:[]});undoState=null;save();ui.accId=null;ui.showBrokers=false;ui.tab="port";render();toast("데이터를 삭제했습니다.");
+    },true,"삭제");}
 });
 
 /* 계좌 추가 (모달) */
@@ -2197,17 +2246,10 @@ function setCcyToggle(wrap,val){
 
 /* 상단 백업 버튼 */
 (function(){
-  var tb=el("topBackup");
-  if(tb)tb.addEventListener("click",function(){
-    try{shareBackup();}catch(e){toast("백업을 열 수 없습니다.");}
-  });
-  var tr=el("topRestore");
-  if(tr)tr.addEventListener("click",function(){
-    modal({title:"백업 복원",
-      body:'<p class="mtext" style="line-height:1.7;margin-bottom:4px">어디에서 복원할까요?</p>',
-      okText:"☁ Google 드라이브",cancelText:"⤓ 파일(.json)",
-      onOk:function(){gdRestore();},
-      onCancel:function(){el("importer").click();}});
+  var ts=el("topSettings");
+  if(ts)ts.addEventListener("click",function(){
+    if(ui.editPort)return;
+    ui.tab="settings";render();
   });
   var trf=el("topRefresh");
   if(trf)trf.addEventListener("click",function(){refreshPrices(false);});
