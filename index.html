@@ -136,6 +136,18 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 .gddot{width:8px;height:8px;border-radius:50%;background:var(--txt3);flex-shrink:0;}
 .gddot.on{background:#4ade80;box-shadow:0 0 0 3px rgba(74,222,128,.15);}
 .gddot.warn{background:var(--gold);box-shadow:0 0 0 3px rgba(245,185,66,.15);}
+.bkalert{display:flex;align-items:center;gap:9px;margin-top:12px;padding:11px 13px;
+  border-radius:11px;font-size:12.5px;font-weight:600;line-height:1.4;}
+.bkalert.warn{background:rgba(245,185,66,.10);border:1px solid rgba(245,185,66,.28);color:var(--gold);}
+.bkalert.bad{background:rgba(248,113,113,.10);border:1px solid rgba(248,113,113,.30);color:var(--coral);}
+.bkalert .bka-ic{font-size:14px;flex-shrink:0;}
+.bkalert .bka-msg{flex:1;min-width:0;}
+.bkalert .bka-btn{flex-shrink:0;background:currentColor;border:none;border-radius:7px;
+  padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;}
+.bkalert.warn .bka-btn{color:#1a1508;}
+.bkalert.bad .bka-btn{color:#2a0d0d;}
+.bkalert .bka-x{flex-shrink:0;background:transparent;border:none;color:currentColor;
+  opacity:.6;font-size:13px;cursor:pointer;padding:2px 4px;}
 .gdtxt{font-size:11.5px;color:var(--txt3);font-weight:600;}
 .gdbtns{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px;}
 .gdpicklist{display:flex;flex-direction:column;gap:7px;max-height:50vh;overflow-y:auto;}
@@ -429,6 +441,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
   </div>
   <div class="pills" id="pills"></div>
 </header></div>
+<div class="wrap"><div id="bkAlert" class="bkalert" style="display:none"></div></div>
 <div class="wrap"><main id="app"></main></div>
 <div class="wrap"><div class="verline">리밸런서 <b id="appVer"></b></div></div>
 <input type="file" id="importer" accept="application/json" style="display:none">
@@ -441,7 +454,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 var C={mint:"#4ade80",coral:"#fb7185",gold:"#f5b942",blue:"#609cf6",
   txt:"#e9efea",txt2:"#8b968f",txt3:"#5e6a63",line:"#262b27",bg3:"#1b201d"};
 var SLICE=["#4ade80","#609cf6","#f5b942","#fb7185","#a78bfa","#22d3ee"];
-var APP_VER="v0.10d";   // 빌드 버전 (하단 표시)
+var APP_VER="v0.10e";   // 빌드 버전 (하단 표시)
 function uid(){return Math.random().toString(36).slice(2,9);}
 function won(n){return Math.round(n||0).toLocaleString("ko-KR");}
 function pct(n){return (n>=0?"+":"")+(n*100).toFixed(2)+"%";}
@@ -1028,6 +1041,12 @@ function fmtAgo(ts){
   if(s<86400)return Math.floor(s/3600)+"시간";
   return Math.floor(s/86400)+"일";
 }
+/* 전체 날짜·시각 (2026.07.09 20:32) */
+function fmtDateTime(ts){
+  if(!ts)return "없음";
+  var d=new Date(ts),p=function(n){return n<10?"0"+n:""+n;};
+  return d.getFullYear()+"."+p(d.getMonth()+1)+"."+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes());
+}
 function proxyPanel(){
   return '<div class="card" style="margin-top:8px">'
     +'<div class="lbl">Cloudflare Worker 프록시 주소 (선택)</div>'
@@ -1544,6 +1563,34 @@ function softContrib(acc){
 
 /* ---- 공통 푸터 ---- */
 /* ===================== 설정 페이지 (통합) ===================== */
+/* 백업 상태 알림 배너 — 백업이 밀리거나 미연결 상태에서 실제 데이터가 있으면 경고 */
+var _bkAlertDismissed=0;
+function updateBackupAlert(){
+  var box=el("bkAlert");if(!box)return;
+  /* 설정 탭·수정 모드에선 배너 숨김 (거기서 직접 처리) */
+  if(ui.tab==="settings"||ui.editPort||isTrivialState()){box.style.display="none";return;}
+  var now=Date.now();
+  var msg=null,level="warn";
+  if(!gdLinked()){
+    /* 구글 미연결인데 실제 데이터 있음 — 백업 권장 */
+    if(!state.lastBackup||now-state.lastBackup>3*24*3600*1000){
+      msg="자동 백업이 꺼져 있습니다. 데이터 유실에 대비해 백업하세요.";level="warn";
+    }
+  }else{
+    var last=state.lastCloudBackup||0;
+    if(!last){msg="아직 클라우드 백업이 없습니다. 지금 백업하세요.";level="warn";}
+    else if(now-last>48*3600*1000){msg="마지막 백업이 "+fmtAgo(last)+" 전입니다. 백업이 밀리고 있습니다.";level="bad";}
+    else if(now-last>24*3600*1000){msg="마지막 백업 "+fmtAgo(last)+" 전 · 백업을 권장합니다.";level="warn";}
+  }
+  /* 사용자가 방금 닫았으면(30분) 다시 안 띄움 */
+  if(msg&&(now-_bkAlertDismissed<30*60*1000))msg=null;
+  if(!msg){box.style.display="none";return;}
+  box.className="bkalert "+level;
+  box.innerHTML='<span class="bka-ic">⚠</span><span class="bka-msg">'+esc(msg)+'</span>'
+    +'<button class="bka-btn" data-act="bk-now">백업</button>'
+    +'<button class="bka-x" data-act="bk-dismiss">✕</button>';
+  box.style.display="flex";
+}
 function gdStatusBlock(){
   var gstatus,gbtns;
   if(gdLinked()){
@@ -1566,9 +1613,17 @@ function gdStatusBlock(){
     gstatus='<span class="gddot"></span><span class="gdtxt" id="gdState">연결 안 됨</span>';
     gbtns='<button class="btn sm" data-act="gd-connect">Google 계정 연결</button>';
   }
+  var whenLine="";
+  if(gdLinked()&&state.lastCloudBackup){
+    var stale=Date.now()-state.lastCloudBackup>24*3600*1000;
+    whenLine='<p class="note" style="margin-top:9px;color:'+(stale?C.gold:C.txt3)+'">'
+      +'마지막 백업: '+fmtDateTime(state.lastCloudBackup)+' ('+fmtAgo(state.lastCloudBackup)+' 전)'
+      +(stale?' · 오래되었습니다':'')+'</p>';
+  }
   return '<div class="gdcard">'
     +'<div class="gdhead"><span class="gdtitle">☁ Google 드라이브 자동 백업</span>'+gstatus+'</div>'
     +'<div class="gdbtns">'+gbtns+'</div>'
+    +whenLine
     +'<p class="note" style="margin-top:8px;line-height:1.65">연결하면 데이터 변경 시 자동으로 '
     +'<b style="color:var(--txt2)">본인 드라이브의 앱 전용 폴더</b>에 전체 계좌가 한 번에 백업됩니다. '
     +'복원 시 <b style="color:var(--mint)">백업 시점</b>을 골라 되돌릴 수 있습니다.'
@@ -1670,6 +1725,7 @@ function render(){
 }
 function renderInner(){
   buildPills();
+  updateBackupAlert();
   var ts=el("topSettings"),fc=el("fxChip"),fv=el("fxVal"),trf=el("topRefresh");
   if(ts)ts.disabled=ui.editPort;
   if(trf){
@@ -2104,6 +2160,11 @@ el("app").addEventListener("click",function(e){
   var acc=activeAcc();
   if(act==="tab"){if(ui.editPort)return;ui.tab=t.getAttribute("data-tab");render();}
   else if(act==="go-settings"){ui.tab="settings";render();}
+  else if(act==="bk-now"){
+    if(gdLinked())gdBackupNow(false);
+    else{ui.tab="settings";render();}   // 미연결이면 설정으로 유도(연결부터)
+  }
+  else if(act==="bk-dismiss"){_bkAlertDismissed=Date.now();updateBackupAlert();}
   else if(act==="edit-port"){
     ui.editPort=true;editSnapshot=JSON.parse(JSON.stringify(state));render();}
   else if(act==="save-port"){
