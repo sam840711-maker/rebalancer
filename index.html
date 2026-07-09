@@ -135,6 +135,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 .gdtitle{font-size:13.5px;font-weight:700;color:var(--txt);margin-right:auto;}
 .gddot{width:8px;height:8px;border-radius:50%;background:var(--txt3);flex-shrink:0;}
 .gddot.on{background:#4ade80;box-shadow:0 0 0 3px rgba(74,222,128,.15);}
+.gddot.warn{background:var(--gold);box-shadow:0 0 0 3px rgba(245,185,66,.15);}
 .gdtxt{font-size:11.5px;color:var(--txt3);font-weight:600;}
 .gdbtns{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px;}
 .gdpicklist{display:flex;flex-direction:column;gap:7px;max-height:50vh;overflow-y:auto;}
@@ -440,7 +441,7 @@ tr.total td.lbl{font-family:'IBM Plex Sans KR';}
 var C={mint:"#4ade80",coral:"#fb7185",gold:"#f5b942",blue:"#609cf6",
   txt:"#e9efea",txt2:"#8b968f",txt3:"#5e6a63",line:"#262b27",bg3:"#1b201d"};
 var SLICE=["#4ade80","#609cf6","#f5b942","#fb7185","#a78bfa","#22d3ee"];
-var APP_VER="v0.10c";   // 빌드 버전 (하단 표시)
+var APP_VER="v0.10d";   // 빌드 버전 (하단 표시)
 function uid(){return Math.random().toString(36).slice(2,9);}
 function won(n){return Math.round(n||0).toLocaleString("ko-KR");}
 function pct(n){return (n>=0?"+":"")+(n*100).toFixed(2)+"%";}
@@ -1018,6 +1019,15 @@ function fmtTime(ts){
   var d=new Date(ts),p=function(n){return n<10?"0"+n:""+n;};
   return (d.getMonth()+1)+"/"+d.getDate()+" "+p(d.getHours())+":"+p(d.getMinutes());
 }
+/* 경과 시간 (방금/N분/N시간/N일) */
+function fmtAgo(ts){
+  if(!ts)return "없음";
+  var s=Math.floor((Date.now()-ts)/1000);
+  if(s<60)return "방금";
+  if(s<3600)return Math.floor(s/60)+"분";
+  if(s<86400)return Math.floor(s/3600)+"시간";
+  return Math.floor(s/86400)+"일";
+}
 function proxyPanel(){
   return '<div class="card" style="margin-top:8px">'
     +'<div class="lbl">Cloudflare Worker 프록시 주소 (선택)</div>'
@@ -1544,8 +1554,8 @@ function gdStatusBlock(){
     else{
       cloudTxt="연결됨";
       if(state.lastCloudBackup){
-        var cd=Math.floor((Date.now()-state.lastCloudBackup)/86400000);
-        cloudTxt="연결됨 · 마지막 백업 "+(cd<=0?"오늘":cd+"일 전");
+        cloudTxt="연결됨 · 마지막 백업 "+fmtAgo(state.lastCloudBackup)+" 전";
+        if(Date.now()-state.lastCloudBackup>24*3600*1000){dotCls="gddot warn";}
       }
     }
     gstatus='<span class="'+dotCls+'"></span><span class="gdtxt" id="gdState">'+cloudTxt+'</span>';
@@ -1919,10 +1929,13 @@ function gdBackupNow(silent){
 }
 /* 부팅/기회 시 자동 백업 — 살아있는 토큰이 있을 때만(팝업 절대 없음), 마지막 백업 24h 경과 시 */
 function maybeAutoBackup(){
-  if(!gdLinked()||!gdConnected())return;
+  if(!gdLinked()||!gdOnline())return;
   var last=0;try{last=+localStorage.getItem("rebalancer:gdrive_last")||0;}catch(e){}
-  if(Date.now()-last<24*3600*1000)return;
-  gdBackupNow(true);
+  if(Date.now()-last<12*3600*1000)return;   // 마지막 백업 12시간 이내면 생략
+  if(isTrivialState())return;
+  if(gdConnected()){gdBackupNow(true);return;}
+  /* 토큰 만료 → 조용히 갱신 시도 후 백업 (실패 시 팝업 없이 다음 기회로) */
+  gdGetToken(false).then(function(){gdBackupNow(true);}).catch(function(){});
 }
 /* 복원 — 백업 시점 목록을 보여주고 사용자가 고른 시점을 복원 */
 function gdRestore(){
@@ -1995,7 +2008,18 @@ var gdAutoTimer=null;
 function gdScheduleAuto(){
   if(!gdLinked())return;
   clearTimeout(gdAutoTimer);
-  gdAutoTimer=setTimeout(function(){gdBackupNow(true);},60000);
+  gdAutoTimer=setTimeout(function(){gdAutoBackupSilent();},15000);   // 15초 디바운스
+}
+/* 무음 자동 백업 — 토큰이 만료됐어도 조용히 갱신 시도 후 백업 (실패해도 팝업 없음) */
+function gdAutoBackupSilent(){
+  if(!gdLinked()||!gdOnline())return;
+  if(GD.backingUp)return;
+  if(isTrivialState())return;
+  if(gdConnected()){gdBackupNow(true);return;}
+  /* 세션 토큰이 없거나 만료 → prompt:none 으로 조용히 갱신 시도 (성공 시에만 백업) */
+  gdGetToken(false).then(function(){gdBackupNow(true);}).catch(function(){
+    /* 무음 갱신 실패 → 다음 기회(포커스 복귀·앱 재실행)에 재시도. 팝업 안 띄움 */
+  });
 }
 /* CLIENT_ID 설정 모달 */
 function gdOpenSetup(){
@@ -2557,11 +2581,26 @@ setInterval(function(){
 },5*60*1000);
 if(typeof document!=="undefined"&&document.addEventListener){
   document.addEventListener("visibilitychange",function(){
-    if(document.hidden)return;
+    if(document.hidden){
+      /* 앱이 백그라운드로 갈 때 — 대기 중인 자동 백업이 있으면 즉시 실행 (창 닫혀 유실 방지) */
+      if(gdAutoTimer){clearTimeout(gdAutoTimer);gdAutoTimer=null;gdAutoBackupSilent();}
+      return;
+    }
     if(!state.fxUpdated||(Date.now()-state.fxUpdated>60000)){
       refreshFx(true).then(softFx);
     }
+    /* 포커스 복귀 시 — 마지막 백업이 오래됐으면 조용히 백업 시도 */
+    if(typeof maybeAutoBackup==="function")maybeAutoBackup();
   });
+  /* 페이지 이탈 직전 — 대기 중 백업 flush */
+  window.addEventListener("pagehide",function(){
+    if(gdAutoTimer){clearTimeout(gdAutoTimer);gdAutoTimer=null;gdAutoBackupSilent();}
+  });
+}
+
+/* PWA 저장소 영구화 요청 — 브라우저가 로컬 데이터를 자동으로 비우지 않도록 (재설치/용량부족 대비) */
+if(typeof navigator!=="undefined"&&navigator.storage&&navigator.storage.persist){
+  try{navigator.storage.persisted().then(function(p){if(!p)navigator.storage.persist();});}catch(e){}
 }
 
 /* PWA: 서비스워커 등록 */
